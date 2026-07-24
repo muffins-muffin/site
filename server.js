@@ -1,9 +1,11 @@
 const express = require("express");
 const crypto = require("crypto");
-const PRODUCTS = require("./products.json");
+const path = require("path");
+const PRODUCTS = require("./public/products.json");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const PUBLIC_DIR = path.join(__dirname, "public");
 
 // Toss Payments 개발자센터 문서(docs.tosspayments.com)의 공개 테스트용 키입니다.
 // 실제 서비스로 전환할 때는 개발자센터에서 발급받은 본인 계정의 키로 교체하고,
@@ -15,7 +17,7 @@ const TOSS_SECRET_KEY = process.env.TOSS_SECRET_KEY || "test_gsk_docs_OaPz8L5Kdm
 const orders = new Map();
 
 app.use(express.json());
-app.use(express.static(__dirname));
+app.use(express.static(PUBLIC_DIR));
 
 function findProduct(id) {
   return PRODUCTS.find((p) => p.id === Number(id));
