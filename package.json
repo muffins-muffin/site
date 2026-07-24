@@ -1,0 +1,12 @@
+{
+  "name": "synap365",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SYNAP365 - 스마트 제품 쇼핑몰",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

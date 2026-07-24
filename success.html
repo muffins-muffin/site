@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>결제 완료 - SYNAP365</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .result-page { max-width: 480px; margin: 0 auto; padding: 64px 24px 80px; text-align: center; }
+  .result-page .logo { justify-content: center; margin-bottom: 32px; }
+  .result-icon { font-size: 3.2rem; margin-bottom: 12px; }
+  .result-page h1 { font-size: 1.4rem; margin-bottom: 28px; }
+  .result-card {
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    text-align: left;
+    margin-bottom: 28px;
+  }
+  .result-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.92rem;
+    color: var(--ink-soft);
+    padding: 6px 0;
+  }
+  .result-row strong { color: var(--ink); }
+</style>
+</head>
+<body>
+
+  <div class="result-page">
+    <div class="logo">
+      <span class="logo-text">SYNAP365</span>
+    </div>
+
+    <div id="statusArea">
+      <p class="result-icon">⏳</p>
+      <h1>결제를 확인하는 중입니다...</h1>
+    </div>
+
+    <a href="index.html" class="btn btn-primary">쇼핑 계속하기</a>
+  </div>
+
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const statusArea = document.getElementById("statusArea");
+
+    async function confirmPayment() {
+      const requestData = {
+        paymentKey: urlParams.get("paymentKey"),
+        orderId: urlParams.get("orderId"),
+        amount: urlParams.get("amount"),
+      };
+
+      const response = await fetch("/api/payments/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestData),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        window.location.href = `fail.html?code=${encodeURIComponent(data.code || "")}&message=${encodeURIComponent(data.message || "결제 승인에 실패했습니다.")}`;
+        return;
+      }
+
+      // 결제가 실제로 승인된 뒤에만 장바구니를 비웁니다.
+      localStorage.setItem("synap365_cart", "{}");
+
+      statusArea.innerHTML = `
+        <p class="result-icon">✅</p>
+        <h1>결제가 완료되었습니다</h1>
+        <div class="result-card">
+          <div class="result-row"><span>주문번호</span><strong>${data.orderId}</strong></div>
+          <div class="result-row"><span>상품명</span><strong>${data.orderName}</strong></div>
+          <div class="result-row"><span>결제금액</span><strong>${data.amount.toLocaleString("ko-KR")}원</strong></div>
+          <div class="result-row"><span>결제수단</span><strong>${data.method || "-"}</strong></div>
+        </div>
+      `;
+    }
+
+    confirmPayment().catch(function (err) {
+      console.error(err);
+      statusArea.innerHTML = `<p class="result-icon">⚠️</p><h1>결제 확인 중 오류가 발생했습니다</h1>`;
+    });
+  </script>
+</body>
+</html>

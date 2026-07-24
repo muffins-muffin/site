@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>결제 실패 - SYNAP365</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .result-page { max-width: 480px; margin: 0 auto; padding: 64px 24px 80px; text-align: center; }
+  .result-page .logo { justify-content: center; margin-bottom: 32px; }
+  .result-icon { font-size: 3.2rem; margin-bottom: 12px; }
+  .result-page h1 { font-size: 1.4rem; margin-bottom: 28px; }
+  .result-card {
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    text-align: left;
+    margin-bottom: 28px;
+  }
+  .result-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.92rem;
+    color: var(--ink-soft);
+    padding: 6px 0;
+  }
+  .result-row strong { color: var(--ink); }
+</style>
+</head>
+<body>
+
+  <div class="result-page">
+    <div class="logo">
+      <span class="logo-text">SYNAP365</span>
+    </div>
+
+    <p class="result-icon">⚠️</p>
+    <h1>결제에 실패했습니다</h1>
+    <div class="result-card">
+      <div class="result-row"><span>에러 코드</span><strong id="codeText"></strong></div>
+      <div class="result-row"><span>에러 메시지</span><strong id="messageText"></strong></div>
+    </div>
+
+    <a href="index.html" class="btn btn-primary">장바구니로 돌아가기</a>
+  </div>
+
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    document.getElementById("codeText").textContent = urlParams.get("code") || "-";
+    document.getElementById("messageText").textContent = urlParams.get("message") || "알 수 없는 오류가 발생했습니다.";
+  </script>
+</body>
+</html>

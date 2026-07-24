@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SYNAP365 - 스마트 제품 쇼핑몰</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="header-inner container">
+      <div class="logo" data-action="go-home">
+        <span class="logo-text">SYNAP365</span>
+      </div>
+
+      <nav class="main-nav" id="mainNav">
+        <a href="#" class="nav-link active" data-category="all">전체상품</a>
+        <a href="#" class="nav-link" data-category="remotecam">원격카메라</a>
+        <a href="#" class="nav-link" data-category="electronics">전자기기</a>
+        <a href="#" class="nav-link" data-category="home">스마트홈</a>
+        <a href="#inquiry" class="nav-link">고객문의</a>
+      </nav>
+
+      <div class="header-actions">
+        <div class="search-box">
+          <input type="text" id="searchInput" placeholder="상품을 검색해보세요">
+          <button id="searchBtn" aria-label="검색">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          </button>
+        </div>
+        <button class="icon-btn" id="cartBtn" aria-label="장바구니 열기">
+          <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>
+          <span class="badge" id="cartCount">0</span>
+        </button>
+        <button class="icon-btn menu-toggle" id="menuToggle" aria-label="메뉴 열기">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Slider -->
+  <section class="hero" id="heroSlider">
+    <div class="hero-track" id="heroTrack">
+
+      <div class="hero-slide slide-a">
+        <div class="container hero-inner">
+          <div class="hero-text">
+            <p class="hero-badge">2026 스마트 제품 시즌 오픈</p>
+            <h1>당신의 일상을 스마트하게<br>채우는 순간, <span>SYNAP365</span></h1>
+            <p class="hero-desc">엄선된 스마트 제품들을 합리적인 가격으로 만나보세요. 지금 가입하면 첫 구매 15% 할인!</p>
+            <div class="hero-buttons">
+              <a href="#products" class="btn btn-primary">지금 쇼핑하기</a>
+              <a href="#categories" class="btn btn-ghost">카테고리 둘러보기</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-slide slide-b">
+        <div class="container hero-inner">
+          <div class="hero-text">
+            <p class="hero-badge">NEW · 원격카메라</p>
+            <h1>차 안에 두고, 손 안에서<br>확인하는 <span>DualCam</span></h1>
+            <p class="hero-desc">스마트폰 두 대로 완성하는 듀얼 대시캠. 주행·주차·충격을 자동으로 녹화하고 어디서든 실시간으로 확인하세요.</p>
+            <div class="hero-buttons">
+              <a href="#products" class="btn btn-primary" data-category="remotecam">DualCam 보러가기</a>
+              <a href="#categories" class="btn btn-ghost">카테고리 둘러보기</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-slide slide-c">
+        <div class="container hero-inner">
+          <div class="hero-text">
+            <p class="hero-badge">기간 한정 특가</p>
+            <h1>최대 30% 할인<br>지금이 <span>구매 타이밍</span></h1>
+            <p class="hero-desc">인기 상품 한정 특가전이 진행 중이에요. 품절되기 전에 서둘러 담아보세요.</p>
+            <div class="hero-buttons">
+              <a href="#products" class="btn btn-primary">특가 상품 보기</a>
+              <a href="#categories" class="btn btn-ghost">카테고리 둘러보기</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <button class="hero-arrow hero-prev" id="heroPrev" aria-label="이전 배너">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+    </button>
+    <button class="hero-arrow hero-next" id="heroNext" aria-label="다음 배너">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+    </button>
+    <div class="hero-dots" id="heroDots"></div>
+  </section>
+
+  <!-- Logo marquee -->
+  <section class="logo-marquee" aria-label="입점/제휴 브랜드">
+    <div class="marquee-track">
+      <div class="marquee-content">
+        <span class="logo-chip">🛍️ SYNAP365</span>
+        <span class="logo-chip">📷 DualCam</span>
+        <span class="logo-chip">🎧 SOUND LAB</span>
+        <span class="logo-chip">🚗 AUTO TIMES</span>
+        <span class="logo-chip">🏠 SMART HOME</span>
+        <span class="logo-chip">🤖 TECH DAILY</span>
+        <span class="logo-chip">🔌 IOT WORLD</span>
+        <span class="logo-chip">📰 GADGET NEWS</span>
+      </div>
+      <div class="marquee-content" aria-hidden="true">
+        <span class="logo-chip">🛍️ SYNAP365</span>
+        <span class="logo-chip">📷 DualCam</span>
+        <span class="logo-chip">🎧 SOUND LAB</span>
+        <span class="logo-chip">🚗 AUTO TIMES</span>
+        <span class="logo-chip">🏠 SMART HOME</span>
+        <span class="logo-chip">🤖 TECH DAILY</span>
+        <span class="logo-chip">🔌 IOT WORLD</span>
+        <span class="logo-chip">📰 GADGET NEWS</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Categories -->
+  <section class="categories" id="categories">
+    <div class="container">
+      <h2 class="section-title">카테고리별로 보기</h2>
+      <div class="category-grid">
+        <button class="category-card" data-category="remotecam"><span>📷</span><p>원격카메라</p></button>
+        <button class="category-card" data-category="electronics"><span>📱</span><p>전자기기</p></button>
+        <button class="category-card" data-category="home"><span>🏠</span><p>스마트홈</p></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Products -->
+  <section class="products" id="products">
+    <div class="container">
+      <div class="products-header">
+        <h2 class="section-title" id="productsTitle">전체 상품</h2>
+        <div class="sort-box">
+          <label for="sortSelect">정렬</label>
+          <select id="sortSelect">
+            <option value="popular">인기순</option>
+            <option value="price-asc">낮은 가격순</option>
+            <option value="price-desc">높은 가격순</option>
+            <option value="rating">평점순</option>
+          </select>
+        </div>
+      </div>
+      <p class="empty-msg" id="emptyMsg" hidden>검색 결과가 없어요. 다른 키워드로 시도해보세요.</p>
+      <div class="product-grid" id="productGrid"></div>
+    </div>
+  </section>
+
+  <!-- Newsletter -->
+  <section class="newsletter">
+    <div class="container newsletter-inner">
+      <h2>새로운 소식을 가장 먼저 받아보세요</h2>
+      <p>신제품 출시와 특별 할인 소식을 이메일로 보내드려요.</p>
+      <form id="newsletterForm">
+        <input type="email" id="newsletterEmail" placeholder="이메일 주소를 입력하세요" required>
+        <button type="submit" class="btn btn-primary">구독하기</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- Inquiry -->
+  <section class="inquiry" id="inquiry">
+    <div class="container inquiry-inner">
+      <div class="inquiry-text">
+        <h2 class="section-title">고객문의</h2>
+        <p>제품 관련 궁금한 점을 남겨주시면 확인 후 빠르게 답변드릴게요.</p>
+      </div>
+      <form class="inquiry-form" id="inquiryForm">
+        <div class="form-row">
+          <input type="text" id="inquiryName" placeholder="이름" required>
+          <input type="text" id="inquiryContact" placeholder="이메일 또는 연락처" required>
+        </div>
+        <textarea id="inquiryMessage" placeholder="문의하실 내용을 입력해주세요" rows="5" required></textarea>
+        <button type="submit" class="btn btn-primary">문의 보내기</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-col">
+        <div class="logo"><span class="logo-text">SYNAP365</span></div>
+        <p>일상을 더 편리하게 만드는 스마트 제품을 합리적인 가격에 큐레이션합니다.</p>
+      </div>
+      <div class="footer-col">
+        <h4>쇼핑 안내</h4>
+        <ul>
+          <li><a href="#">배송 안내</a></li>
+          <li><a href="#">교환/반품</a></li>
+          <li><a href="#">자주 묻는 질문</a></li>
+          <li><a href="#inquiry">고객문의</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>고객센터</h4>
+        <ul>
+          <li>1588-0000</li>
+          <li>평일 09:00 - 18:00</li>
+          <li>support@synap365.example</li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom container">
+      <p>&copy; 2026 SYNAP365. All rights reserved.</p>
+    </div>
+  </footer>
+
+  <!-- Cart Drawer -->
+  <div class="overlay" id="overlay"></div>
+  <aside class="cart-drawer" id="cartDrawer">
+    <div class="cart-header">
+      <h3>장바구니</h3>
+      <button class="icon-btn" id="closeCart" aria-label="장바구니 닫기">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+    <div class="cart-items" id="cartItems"></div>
+    <div class="cart-footer">
+      <div class="cart-total-row">
+        <span>총 합계</span>
+        <strong id="cartTotal">0원</strong>
+      </div>
+      <button class="btn btn-primary btn-full" id="checkoutBtn">주문하기</button>
+    </div>
+  </aside>
+
+  <!-- Product Detail Modal -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal" id="productModal"></div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <script src="script.js"></script>
+</body>
+</html>

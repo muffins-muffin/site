@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>주문/결제 - SYNAP365</title>
+<link rel="stylesheet" href="style.css">
+<!-- Toss Payments 결제위젯 SDK -->
+<script src="https://js.tosspayments.com/v1/payment-widget"></script>
+<style>
+  .checkout-page { max-width: 560px; margin: 0 auto; padding: 48px 24px 80px; }
+  .checkout-page .logo { justify-content: center; margin-bottom: 32px; }
+  .order-summary {
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px 24px;
+    margin-bottom: 24px;
+  }
+  .order-summary h2 { font-size: 1.05rem; margin-bottom: 14px; }
+  .order-summary-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.92rem;
+    color: var(--ink-soft);
+    padding: 4px 0;
+  }
+  .order-summary-row strong { color: var(--ink); font-size: 1.15rem; }
+  #payment-method, #agreement { margin-bottom: 18px; }
+  #pay-button { margin-top: 8px; }
+  .checkout-status { text-align: center; color: var(--ink-soft); padding: 40px 0; }
+  .checkout-back { display: block; text-align: center; margin-top: 18px; color: var(--ink-soft); font-size: 0.88rem; }
+  .checkout-back:hover { color: var(--primary); }
+</style>
+</head>
+<body>
+
+  <div class="checkout-page">
+    <div class="logo">
+      <span class="logo-text">SYNAP365</span>
+    </div>
+
+    <div id="orderStatus" class="checkout-status">주문 정보를 불러오는 중...</div>
+
+    <div id="checkoutContent" hidden>
+      <div class="order-summary">
+        <h2>주문 내역</h2>
+        <div class="order-summary-row"><span id="orderNameText"></span></div>
+        <div class="order-summary-row"><span>결제 금액</span><strong id="orderAmountText"></strong></div>
+      </div>
+
+      <div id="payment-method"></div>
+      <div id="agreement"></div>
+      <button class="btn btn-primary btn-full" id="pay-button" disabled>결제하기</button>
+    </div>
+
+    <a href="index.html" class="checkout-back">← 쇼핑 계속하기</a>
+  </div>
+
+  <script>
+    const orderStatusEl = document.getElementById("orderStatus");
+    const checkoutContentEl = document.getElementById("checkoutContent");
+    const payButton = document.getElementById("pay-button");
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const orderId = urlParams.get("orderId");
+
+    const generateRandomString = () => window.btoa(Math.random()).slice(0, 20);
+
+    async function init() {
+      if (!orderId) {
+        orderStatusEl.textContent = "잘못된 접근입니다. 장바구니에서 다시 주문해주세요.";
+        return;
+      }
+
+      const [configRes, orderRes] = await Promise.all([
+        fetch("/api/config"),
+        fetch(`/api/orders/${encodeURIComponent(orderId)}`),
+      ]);
+
+      if (!orderRes.ok) {
+        orderStatusEl.textContent = "주문 정보를 찾을 수 없습니다. 장바구니에서 다시 주문해주세요.";
+        return;
+      }
+
+      const { clientKey } = await configRes.json();
+      const order = await orderRes.json();
+
+      if (order.status === "paid") {
+        orderStatusEl.textContent = "이미 결제가 완료된 주문입니다.";
+        return;
+      }
+
+      orderStatusEl.hidden = true;
+      checkoutContentEl.hidden = false;
+      document.getElementById("orderNameText").textContent = order.orderName;
+      document.getElementById("orderAmountText").textContent = order.amount.toLocaleString("ko-KR") + "원";
+
+      const customerKey = generateRandomString();
+      const paymentWidget = PaymentWidget(clientKey, customerKey);
+
+      const paymentMethodWidget = paymentWidget.renderPaymentMethods(
+        "#payment-method",
+        { value: order.amount },
+        { variantKey: "DEFAULT" }
+      );
+      paymentWidget.renderAgreement("#agreement", { variantKey: "AGREEMENT" });
+
+      paymentMethodWidget.on("ready", function () {
+        payButton.disabled = false;
+      });
+
+      payButton.addEventListener("click", function () {
+        paymentWidget.requestPayment({
+          orderId: order.orderId,
+          orderName: order.orderName,
+          amount: order.amount,
+          successUrl: window.location.origin + "/success.html",
+          failUrl: window.location.origin + "/fail.html",
+        });
+      });
+    }
+
+    init().catch(function (err) {
+      console.error(err);
+      orderStatusEl.textContent = "주문 정보를 불러오는 중 오류가 발생했습니다.";
+    });
+  </script>
+</body>
+</html>
