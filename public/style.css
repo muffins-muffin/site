@@ -306,7 +306,7 @@ img { max-width: 100%; display: block; }
 .marquee-track {
   display: flex;
   width: max-content;
-  animation: marqueeScroll 26s linear infinite;
+  animation: marqueeScroll 70s linear infinite;
 }
 .logo-marquee:hover .marquee-track {
   animation-play-state: paused;
