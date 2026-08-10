@@ -314,8 +314,8 @@ img { max-width: 100%; display: block; }
 .marquee-content {
   display: flex;
   align-items: center;
-  gap: 40px;
-  padding-right: 40px;
+  gap: 64px;
+  padding-right: 64px;
 }
 .logo-chip {
   display: inline-flex;
@@ -341,7 +341,7 @@ img { max-width: 100%; display: block; }
 }
 @media (max-width: 760px) {
   .logo-chip { font-size: 0.9rem; }
-  .marquee-content { gap: 18px; padding-right: 18px; }
+  .marquee-content { gap: 32px; padding-right: 32px; }
   .logo-marquee::before,
   .logo-marquee::after { width: 50px; }
 }
