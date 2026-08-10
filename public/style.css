@@ -281,7 +281,7 @@ img { max-width: 100%; display: block; }
   background: var(--bg-soft);
   border-bottom: 1px solid var(--border);
   overflow: hidden;
-  padding: 18px 0;
+  padding: 10px 0;
 }
 .marquee-track {
   display: flex;
@@ -302,9 +302,9 @@ img { max-width: 100%; display: block; }
   align-items: center;
   gap: 8px;
   white-space: nowrap;
-  padding: 9px 20px;
+  padding: 5px 20px;
   font-weight: 700;
-  font-size: 0.85rem;
+  font-size: 1.05rem;
   color: var(--ink-soft);
   opacity: 0.45;
 }
@@ -824,7 +824,7 @@ img { max-width: 100%; display: block; }
   .hero-arrow { width: 36px; height: 36px; font-size: 1.15rem; }
   .hero-prev { left: 10px; }
   .hero-next { right: 10px; }
-  .logo-chip { padding: 7px 14px; font-size: 0.78rem; }
+  .logo-chip { padding: 4px 14px; font-size: 0.92rem; }
   .inquiry-inner { grid-template-columns: 1fr; }
   .inquiry-form .form-row { flex-direction: column; }
 }
