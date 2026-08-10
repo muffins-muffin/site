@@ -39,7 +39,6 @@ const productModal = document.getElementById("productModal");
 const toastEl = document.getElementById("toast");
 const menuToggle = document.getElementById("menuToggle");
 const mainNav = document.getElementById("mainNav");
-const newsletterForm = document.getElementById("newsletterForm");
 
 const categoryNames = {
   all: "전체 상품",
@@ -337,19 +336,6 @@ checkoutBtn.addEventListener("click", async () => {
 
 menuToggle.addEventListener("click", () => {
   mainNav.classList.toggle("mobile-open");
-});
-
-newsletterForm.addEventListener("submit", (e) => {
-  e.preventDefault();
-  showToast("구독해주셔서 감사합니다! 📩");
-  newsletterForm.reset();
-});
-
-const inquiryForm = document.getElementById("inquiryForm");
-inquiryForm.addEventListener("submit", (e) => {
-  e.preventDefault();
-  showToast("문의가 접수되었습니다. 빠르게 답변드릴게요! 📩");
-  inquiryForm.reset();
 });
 
 document.addEventListener("keydown", (e) => {

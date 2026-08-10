@@ -535,72 +535,6 @@ img { max-width: 100%; display: block; }
 }
 .add-cart-btn:hover { background: var(--primary); }
 
-/* Newsletter */
-.newsletter {
-  background: var(--ink);
-  color: #fff;
-  padding: 64px 0;
-}
-.newsletter-inner { text-align: center; }
-.newsletter h2 { font-size: 1.7rem; margin-bottom: 10px; letter-spacing: -0.5px; }
-.newsletter p { color: #c7c7d6; margin-bottom: 28px; }
-#newsletterForm {
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-  max-width: 440px;
-  margin: 0 auto;
-  flex-wrap: wrap;
-}
-#newsletterForm input {
-  flex: 1;
-  min-width: 220px;
-  padding: 13px 18px;
-  border-radius: 999px;
-  border: none;
-  outline: none;
-  font-size: 0.92rem;
-}
-
-/* Inquiry */
-.inquiry { padding: 64px 0; background: #fff; }
-.inquiry-inner {
-  display: grid;
-  grid-template-columns: 0.85fr 1.15fr;
-  gap: 40px;
-  align-items: start;
-}
-.inquiry-text .section-title { margin-bottom: 10px; }
-.inquiry-text p { color: var(--ink-soft); }
-.inquiry-form {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  background: var(--bg-soft);
-  padding: 28px;
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-}
-.inquiry-form .form-row {
-  display: flex;
-  gap: 12px;
-}
-.inquiry-form input,
-.inquiry-form textarea {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 12px 14px;
-  font-size: 0.92rem;
-  font-family: inherit;
-  outline: none;
-  background: #fff;
-  transition: border-color 0.15s;
-}
-.inquiry-form input:focus,
-.inquiry-form textarea:focus { border-color: var(--primary); }
-.inquiry-form textarea { resize: vertical; }
-.inquiry-form button { align-self: flex-start; }
-
 /* Footer */
 .site-footer { background: var(--bg-soft); padding-top: 56px; }
 .footer-inner {
@@ -854,8 +788,6 @@ img { max-width: 100%; display: block; }
   .hero-arrow { width: 36px; height: 36px; font-size: 1.15rem; }
   .hero-prev { left: 10px; }
   .hero-next { right: 10px; }
-  .inquiry-inner { grid-template-columns: 1fr; }
-  .inquiry-form .form-row { flex-direction: column; }
 }
 
 @media (max-width: 480px) {
