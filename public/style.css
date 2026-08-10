@@ -278,10 +278,30 @@ img { max-width: 100%; display: block; }
 
 /* Logo marquee */
 .logo-marquee {
-  background: var(--bg-soft);
+  position: relative;
+  background: linear-gradient(180deg, #ffffff, var(--bg-soft));
+  border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
   overflow: hidden;
-  padding: 10px 0;
+  padding: 16px 0;
+}
+.logo-marquee::before,
+.logo-marquee::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 90px;
+  z-index: 2;
+  pointer-events: none;
+}
+.logo-marquee::before {
+  left: 0;
+  background: linear-gradient(90deg, #fff, rgba(255, 255, 255, 0));
+}
+.logo-marquee::after {
+  right: 0;
+  background: linear-gradient(270deg, var(--bg-soft), rgba(247, 247, 251, 0));
 }
 .marquee-track {
   display: flex;
@@ -294,19 +314,28 @@ img { max-width: 100%; display: block; }
 .marquee-content {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding-right: 14px;
+  gap: 28px;
+  padding-right: 28px;
 }
 .logo-chip {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
   white-space: nowrap;
-  padding: 5px 20px;
-  font-weight: 700;
-  font-size: 1.05rem;
+  font-weight: 800;
+  font-size: 1.8rem;
+  letter-spacing: 1px;
+  background: linear-gradient(90deg, var(--ink), #4a4e6b);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  opacity: 0.55;
+  transition: opacity 0.25s ease;
+}
+.logo-marquee:hover .logo-chip { opacity: 0.85; }
+.marquee-dot {
+  font-size: 1rem;
   color: var(--ink-soft);
-  opacity: 0.45;
+  opacity: 0.3;
 }
 @keyframes marqueeScroll {
   from { transform: translateX(0); }
@@ -314,6 +343,12 @@ img { max-width: 100%; display: block; }
 }
 @media (prefers-reduced-motion: reduce) {
   .marquee-track { animation: none; }
+}
+@media (max-width: 760px) {
+  .logo-chip { font-size: 1.2rem; }
+  .marquee-content { gap: 18px; padding-right: 18px; }
+  .logo-marquee::before,
+  .logo-marquee::after { width: 50px; }
 }
 
 /* Section titles */
@@ -824,7 +859,6 @@ img { max-width: 100%; display: block; }
   .hero-arrow { width: 36px; height: 36px; font-size: 1.15rem; }
   .hero-prev { left: 10px; }
   .hero-next { right: 10px; }
-  .logo-chip { padding: 4px 14px; font-size: 0.92rem; }
   .inquiry-inner { grid-template-columns: 1fr; }
   .inquiry-form .form-row { flex-direction: column; }
 }
