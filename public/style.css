@@ -314,15 +314,15 @@ img { max-width: 100%; display: block; }
 .marquee-content {
   display: flex;
   align-items: center;
-  gap: 28px;
-  padding-right: 28px;
+  gap: 40px;
+  padding-right: 40px;
 }
 .logo-chip {
   display: inline-flex;
   align-items: center;
   white-space: nowrap;
   font-weight: 800;
-  font-size: 1.8rem;
+  font-size: 1.15rem;
   letter-spacing: 1px;
   background: linear-gradient(90deg, var(--ink), #4a4e6b);
   -webkit-background-clip: text;
@@ -332,11 +332,6 @@ img { max-width: 100%; display: block; }
   transition: opacity 0.25s ease;
 }
 .logo-marquee:hover .logo-chip { opacity: 0.85; }
-.marquee-dot {
-  font-size: 1rem;
-  color: var(--ink-soft);
-  opacity: 0.3;
-}
 @keyframes marqueeScroll {
   from { transform: translateX(0); }
   to { transform: translateX(-50%); }
@@ -345,7 +340,7 @@ img { max-width: 100%; display: block; }
   .marquee-track { animation: none; }
 }
 @media (max-width: 760px) {
-  .logo-chip { font-size: 1.2rem; }
+  .logo-chip { font-size: 0.9rem; }
   .marquee-content { gap: 18px; padding-right: 18px; }
   .logo-marquee::before,
   .logo-marquee::after { width: 50px; }
