@@ -56,11 +56,15 @@ function renderTable() {
       const thumb = p.img
         ? `<img src="${imgSrc(p.img)}" alt="${p.name}">`
         : p.icon || "🛍️";
+      const displayName = p.displayName || p.name;
+      const displayLine =
+        displayName !== p.name ? `<div class="product-name-sub">노출: ${escapeHtml(displayName)}</div>` : "";
       return `
         <tr data-id="${p.id}">
           <td><div class="table-thumb">${thumb}</div></td>
           <td>
             <div class="product-name">${escapeHtml(p.name)}</div>
+            ${displayLine}
             <div class="product-name-sub">#${p.id}</div>
           </td>
           <td>${CATEGORY_LABELS[p.cat] || p.cat}</td>
@@ -101,6 +105,7 @@ function startEdit(product) {
   formError.textContent = "";
 
   form.name.value = product.name || "";
+  form.displayName.value = product.displayName && product.displayName !== product.name ? product.displayName : "";
   form.cat.value = product.cat || "remotecam";
   form.desc.value = product.desc || "";
   form.price.value = product.price ?? "";

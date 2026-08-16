@@ -51,7 +51,7 @@ const categoryNames = {
 function getFilteredProducts() {
   let list = PRODUCTS.filter((p) => {
     const matchCat = state.category === "all" || p.cat === state.category;
-    const matchQuery = p.name.toLowerCase().includes(state.query.toLowerCase());
+    const matchQuery = (p.displayName || p.name).toLowerCase().includes(state.query.toLowerCase());
     return matchCat && matchQuery;
   });
 
@@ -91,11 +91,11 @@ function renderProducts() {
       <div class="product-thumb" style="background:${thumbColor(p.cat)}">
         ${p.badge ? `<span class="product-badge">${p.badge}</span>` : ""}
         <button class="product-wish ${isWished ? "active" : ""}" data-wish="${p.id}" aria-label="위시리스트">${ICON_HEART(isWished)}</button>
-        ${p.img ? `<img class="product-thumb-img" src="${p.img}" alt="${p.name}">` : `<span>${p.icon}</span>`}
+        ${p.img ? `<img class="product-thumb-img" src="${p.img}" alt="${p.displayName || p.name}">` : `<span>${p.icon}</span>`}
       </div>
       <div class="product-info">
         <span class="product-cat">${p.catLabel}</span>
-        <h3 class="product-name">${p.name}</h3>
+        <h3 class="product-name">${p.displayName || p.name}</h3>
         <span class="product-rating">⭐ ${p.rating} (${p.reviews})</span>
         <div class="product-price-row">
           <span class="product-price">${formatWon(p.price)}</span>
@@ -166,9 +166,9 @@ function renderCart() {
       total += p.price * qty;
       return `
         <div class="cart-item">
-          <div class="cart-item-thumb" style="background:${thumbColor(p.cat)}">${p.img ? `<img class="cart-item-thumb-img" src="${p.img}" alt="${p.name}">` : p.icon}</div>
+          <div class="cart-item-thumb" style="background:${thumbColor(p.cat)}">${p.img ? `<img class="cart-item-thumb-img" src="${p.img}" alt="${p.displayName || p.name}">` : p.icon}</div>
           <div class="cart-item-info">
-            <p class="cart-item-name">${p.name}</p>
+            <p class="cart-item-name">${p.displayName || p.name}</p>
             <p class="cart-item-price">${formatWon(p.price)}</p>
             <div class="cart-item-controls">
               <button class="qty-btn" data-qty-down="${p.id}">−</button>
@@ -199,10 +199,10 @@ function openProductModal(id) {
 
   productModal.innerHTML = `
     <button class="modal-close" id="modalClose">${ICON_CLOSE}</button>
-    <div class="modal-thumb" style="background:${thumbColor(p.cat)}">${p.img ? `<img class="modal-thumb-img" src="${p.img}" alt="${p.name}">` : p.icon}</div>
+    <div class="modal-thumb" style="background:${thumbColor(p.cat)}">${p.img ? `<img class="modal-thumb-img" src="${p.img}" alt="${p.displayName || p.name}">` : p.icon}</div>
     <div class="modal-info">
       <span class="product-cat">${p.catLabel}</span>
-      <h2>${p.name}</h2>
+      <h2>${p.displayName || p.name}</h2>
       <p class="modal-rating">⭐ ${p.rating} · 리뷰 ${p.reviews}개</p>
       <div class="modal-price-row">
         <span class="modal-price">${formatWon(p.price)}</span>

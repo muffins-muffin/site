@@ -50,6 +50,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS products (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
+    displayName TEXT NOT NULL DEFAULT '',
     cat TEXT NOT NULL,
     catLabel TEXT NOT NULL,
     img TEXT,
@@ -63,13 +64,21 @@ db.exec(`
   )
 `);
 
+// 기존 DB(displayName 컬럼이 생기기 전에 만들어진)를 위한 마이그레이션.
+const hasDisplayName = db.prepare("PRAGMA table_info(products)").all().some((col) => col.name === "displayName");
+if (!hasDisplayName) {
+  db.exec("ALTER TABLE products ADD COLUMN displayName TEXT NOT NULL DEFAULT ''");
+  db.prepare("UPDATE products SET displayName = name WHERE displayName = ''").run();
+  console.log("[마이그레이션] products 테이블에 displayName 컬럼을 추가했습니다.");
+}
+
 // 최초 실행이라 DB가 비어있으면(products 테이블 row 0개) public/products.json을
 // 초기 카탈로그로 한 번만 시드합니다. 이후에는 DB가 유일한 상품 데이터 원본입니다.
 if (db.prepare("SELECT COUNT(*) AS n FROM products").get().n === 0) {
   const seed = JSON.parse(fs.readFileSync(path.join(PUBLIC_DIR, "products.json"), "utf-8"));
   const insertSeed = db.prepare(`
-    INSERT INTO products (id, name, cat, catLabel, img, icon, price, originalPrice, rating, reviews, badge, description)
-    VALUES (@id, @name, @cat, @catLabel, @img, @icon, @price, @originalPrice, @rating, @reviews, @badge, @description)
+    INSERT INTO products (id, name, displayName, cat, catLabel, img, icon, price, originalPrice, rating, reviews, badge, description)
+    VALUES (@id, @name, @displayName, @cat, @catLabel, @img, @icon, @price, @originalPrice, @rating, @reviews, @badge, @description)
   `);
   const seedAll = db.transaction((rows) => {
     for (const r of rows) {
@@ -81,6 +90,7 @@ if (db.prepare("SELECT COUNT(*) AS n FROM products").get().n === 0) {
         reviews: null,
         badge: null,
         ...r,
+        displayName: r.name,
         description: r.desc,
       });
     }
@@ -107,15 +117,15 @@ function findProduct(id) {
 function insertProduct(data) {
   const info = db
     .prepare(
-      `INSERT INTO products (name, cat, catLabel, img, icon, price, originalPrice, rating, reviews, badge, description)
-       VALUES (@name, @cat, @catLabel, @img, @icon, @price, @originalPrice, @rating, @reviews, @badge, @description)`
+      `INSERT INTO products (name, displayName, cat, catLabel, img, icon, price, originalPrice, rating, reviews, badge, description)
+       VALUES (@name, @displayName, @cat, @catLabel, @img, @icon, @price, @originalPrice, @rating, @reviews, @badge, @description)`
     )
     .run(data);
   return findProduct(info.lastInsertRowid);
 }
 function updateProductRow(id, data) {
   db.prepare(
-    `UPDATE products SET name=@name, cat=@cat, catLabel=@catLabel, img=@img, icon=@icon,
+    `UPDATE products SET name=@name, displayName=@displayName, cat=@cat, catLabel=@catLabel, img=@img, icon=@icon,
        price=@price, originalPrice=@originalPrice, rating=@rating, reviews=@reviews, badge=@badge, description=@description
      WHERE id=@id`
   ).run({ id: Number(id), ...data });
@@ -297,6 +307,7 @@ app.get("/admin/api/products", requireAdminApi, (req, res) => {
 app.post("/admin/api/products", requireAdminApi, upload.single("image"), async (req, res) => {
   const body = req.body || {};
   const name = (body.name || "").trim();
+  const displayName = (body.displayName || "").trim();
   const cat = body.cat;
   const desc = (body.desc || "").trim();
   const price = Number(body.price);
@@ -313,6 +324,7 @@ app.post("/admin/api/products", requireAdminApi, upload.single("image"), async (
 
     const product = insertProduct({
       name,
+      displayName: displayName || name,
       cat,
       catLabel: CATEGORY_LABELS[cat],
       price,
@@ -341,6 +353,7 @@ app.put("/admin/api/products/:id", requireAdminApi, upload.single("image"), asyn
 
   const body = req.body || {};
   const name = (body.name || "").trim();
+  const displayName = (body.displayName || "").trim();
   const cat = body.cat;
   const desc = (body.desc || "").trim();
   const price = Number(body.price);
@@ -366,6 +379,7 @@ app.put("/admin/api/products/:id", requireAdminApi, upload.single("image"), asyn
 
     const product = updateProductRow(existing.id, {
       name,
+      displayName: displayName || name,
       cat,
       catLabel: CATEGORY_LABELS[cat],
       price,
@@ -419,7 +433,7 @@ app.post("/api/orders", (req, res) => {
       return res.status(400).json({ message: "유효하지 않은 상품이 포함되어 있습니다." });
     }
     amount += product.price * qty;
-    names.push(product.name);
+    names.push(product.displayName || product.name);
   }
 
   const orderId = "order_" + crypto.randomBytes(16).toString("base64url");
