@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: synap365
+    env: node
+    # 상품 DB(SQLite)를 아래 disk에 저장하기 때문에 영구 디스크를 지원하는 유료 플랜이 필요합니다.
+    # (free 플랜은 재배포할 때마다 디스크가 초기화되어 상품 데이터가 사라집니다)
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm start
+    disk:
+      name: data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATA_DIR
+        value: /var/data
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: TOSS_CLIENT_KEY
+        sync: false
+      - key: TOSS_SECRET_KEY
+        sync: false

@@ -1,6 +1,7 @@
 const express = require("express");
 const session = require("express-session");
 const multer = require("multer");
+const Database = require("better-sqlite3");
 const fs = require("fs");
 const crypto = require("crypto");
 const path = require("path");
@@ -9,9 +10,13 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, "public");
 const ADMIN_DIR = path.join(__dirname, "admin");
-const PRODUCTS_PATH = path.join(PUBLIC_DIR, "products.json");
-const PRODUCT_IMAGE_DIR = path.join(PUBLIC_DIR, "assets", "products");
-fs.mkdirSync(PRODUCT_IMAGE_DIR, { recursive: true });
+
+// 상품 DB(SQLite)와 업로드 이미지를 저장하는 위치입니다. Render 등에 배포할 때는
+// DATA_DIR을 영구 디스크(Persistent Disk) 마운트 경로로 지정해야, 재배포해도
+// 관리자에서 등록한 상품/이미지가 사라지지 않습니다. (예: DATA_DIR=/var/data)
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
+const UPLOADS_DIR = path.join(DATA_DIR, "uploads");
+fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
 // Toss Payments 개발자센터 문서(docs.tosspayments.com)의 공개 테스트용 키입니다.
 // 실제 서비스로 전환할 때는 개발자센터에서 발급받은 본인 계정의 키로 교체하고,
@@ -38,17 +43,89 @@ const CATEGORY_LABELS = {
 // 주문 저장소 (데모용 인메모리 저장소 - 서버 재시작 시 초기화됨)
 const orders = new Map();
 
-// ---------- 상품 데이터 (products.json 파일과 동기화되는 메모리 캐시) ----------
-function loadProducts() {
-  return JSON.parse(fs.readFileSync(PRODUCTS_PATH, "utf-8"));
-}
-function saveProducts() {
-  fs.writeFileSync(PRODUCTS_PATH, JSON.stringify(PRODUCTS, null, 2) + "\n", "utf-8");
-}
-let PRODUCTS = loadProducts();
+// ---------- 상품 데이터 (SQLite, DATA_DIR에 영구 저장) ----------
+const db = new Database(path.join(DATA_DIR, "shop.db"));
+db.pragma("journal_mode = WAL");
+db.exec(`
+  CREATE TABLE IF NOT EXISTS products (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    cat TEXT NOT NULL,
+    catLabel TEXT NOT NULL,
+    img TEXT,
+    icon TEXT,
+    price INTEGER NOT NULL,
+    originalPrice INTEGER,
+    rating REAL,
+    reviews INTEGER,
+    badge TEXT,
+    description TEXT NOT NULL
+  )
+`);
 
+// 최초 실행이라 DB가 비어있으면(products 테이블 row 0개) public/products.json을
+// 초기 카탈로그로 한 번만 시드합니다. 이후에는 DB가 유일한 상품 데이터 원본입니다.
+if (db.prepare("SELECT COUNT(*) AS n FROM products").get().n === 0) {
+  const seed = JSON.parse(fs.readFileSync(path.join(PUBLIC_DIR, "products.json"), "utf-8"));
+  const insertSeed = db.prepare(`
+    INSERT INTO products (id, name, cat, catLabel, img, icon, price, originalPrice, rating, reviews, badge, description)
+    VALUES (@id, @name, @cat, @catLabel, @img, @icon, @price, @originalPrice, @rating, @reviews, @badge, @description)
+  `);
+  const seedAll = db.transaction((rows) => {
+    for (const r of rows) {
+      insertSeed.run({
+        img: null,
+        icon: null,
+        originalPrice: null,
+        rating: null,
+        reviews: null,
+        badge: null,
+        ...r,
+        description: r.desc,
+      });
+    }
+  });
+  seedAll(seed);
+  console.log(`[초기화] 상품 ${seed.length}개를 products.json에서 DB로 불러왔습니다.`);
+}
+
+function rowToProduct(row) {
+  if (!row) return row;
+  const { description, img, icon, ...rest } = row;
+  const product = { ...rest, desc: description };
+  if (img) product.img = img;
+  if (icon) product.icon = icon;
+  return product;
+}
+
+function getAllProducts() {
+  return db.prepare("SELECT * FROM products ORDER BY id").all().map(rowToProduct);
+}
 function findProduct(id) {
-  return PRODUCTS.find((p) => p.id === Number(id));
+  return rowToProduct(db.prepare("SELECT * FROM products WHERE id = ?").get(Number(id)));
+}
+function insertProduct(data) {
+  const info = db
+    .prepare(
+      `INSERT INTO products (name, cat, catLabel, img, icon, price, originalPrice, rating, reviews, badge, description)
+       VALUES (@name, @cat, @catLabel, @img, @icon, @price, @originalPrice, @rating, @reviews, @badge, @description)`
+    )
+    .run(data);
+  return findProduct(info.lastInsertRowid);
+}
+function updateProductRow(id, data) {
+  db.prepare(
+    `UPDATE products SET name=@name, cat=@cat, catLabel=@catLabel, img=@img, icon=@icon,
+       price=@price, originalPrice=@originalPrice, rating=@rating, reviews=@reviews, badge=@badge, description=@description
+     WHERE id=@id`
+  ).run({ id: Number(id), ...data });
+  return findProduct(id);
+}
+function deleteProductRow(id) {
+  const product = findProduct(id);
+  if (!product) return null;
+  db.prepare("DELETE FROM products WHERE id = ?").run(Number(id));
+  return product;
 }
 
 app.set("trust proxy", 1);
@@ -102,7 +179,7 @@ app.get("/admin/admin.js", requireAdminPage, (req, res) => res.sendFile(path.joi
 const ALLOWED_EXT = [".png", ".jpg", ".jpeg", ".webp", ".gif"];
 const upload = multer({
   storage: multer.diskStorage({
-    destination: (req, file, cb) => cb(null, PRODUCT_IMAGE_DIR),
+    destination: (req, file, cb) => cb(null, UPLOADS_DIR),
     filename: (req, file, cb) => {
       const ext = ALLOWED_EXT.includes(path.extname(file.originalname).toLowerCase())
         ? path.extname(file.originalname).toLowerCase()
@@ -118,14 +195,14 @@ const upload = multer({
 });
 
 function deleteManagedImage(imgPath) {
-  if (imgPath && imgPath.startsWith("assets/products/")) {
-    fs.unlink(path.join(PUBLIC_DIR, imgPath), () => {});
+  if (imgPath && imgPath.startsWith("uploads/")) {
+    fs.unlink(path.join(DATA_DIR, imgPath), () => {});
   }
 }
 
 // ---------- 관리자 상품 API ----------
 app.get("/admin/api/products", requireAdminApi, (req, res) => {
-  res.json(PRODUCTS);
+  res.json(getAllProducts());
 });
 
 app.post("/admin/api/products", requireAdminApi, upload.single("image"), (req, res) => {
@@ -142,10 +219,8 @@ app.post("/admin/api/products", requireAdminApi, upload.single("image"), (req, r
   }
 
   const originalPrice = body.originalPrice ? Number(body.originalPrice) : null;
-  const nextId = PRODUCTS.reduce((max, p) => Math.max(max, p.id), 0) + 1;
 
-  const product = {
-    id: nextId,
+  const product = insertProduct({
     name,
     cat,
     catLabel: CATEGORY_LABELS[cat],
@@ -154,19 +229,17 @@ app.post("/admin/api/products", requireAdminApi, upload.single("image"), (req, r
     rating: body.rating ? Number(body.rating) : 5.0,
     reviews: body.reviews ? Number(body.reviews) : 0,
     badge: body.badge && body.badge !== "none" ? body.badge : null,
-    desc,
-  };
-  if (req.file) product.img = `assets/products/${req.file.filename}`;
-  else product.icon = icon;
+    description: desc,
+    img: req.file ? `uploads/${req.file.filename}` : null,
+    icon: req.file ? null : icon,
+  });
 
-  PRODUCTS.push(product);
-  saveProducts();
   res.status(201).json(product);
 });
 
 app.put("/admin/api/products/:id", requireAdminApi, upload.single("image"), (req, res) => {
-  const product = findProduct(req.params.id);
-  if (!product) {
+  const existing = findProduct(req.params.id);
+  if (!existing) {
     if (req.file) fs.unlink(req.file.path, () => {});
     return res.status(404).json({ message: "상품을 찾을 수 없습니다." });
   }
@@ -184,41 +257,51 @@ app.put("/admin/api/products/:id", requireAdminApi, upload.single("image"), (req
   }
 
   const originalPrice = body.originalPrice ? Number(body.originalPrice) : null;
-  product.name = name;
-  product.cat = cat;
-  product.catLabel = CATEGORY_LABELS[cat];
-  product.desc = desc;
-  product.price = price;
-  product.originalPrice = Number.isFinite(originalPrice) && originalPrice > 0 ? originalPrice : null;
-  if (body.rating) product.rating = Number(body.rating);
-  if (body.reviews !== undefined && body.reviews !== "") product.reviews = Number(body.reviews);
-  product.badge = body.badge && body.badge !== "none" ? body.badge : null;
 
+  let img = existing.img || null;
+  let finalIcon = existing.icon || null;
   if (req.file) {
-    deleteManagedImage(product.img);
-    product.img = `assets/products/${req.file.filename}`;
-    delete product.icon;
-  } else if (icon && !product.img) {
-    product.icon = icon;
+    deleteManagedImage(existing.img);
+    img = `uploads/${req.file.filename}`;
+    finalIcon = null;
+  } else if (icon && !existing.img) {
+    finalIcon = icon;
   }
 
-  saveProducts();
+  const product = updateProductRow(existing.id, {
+    name,
+    cat,
+    catLabel: CATEGORY_LABELS[cat],
+    price,
+    originalPrice: Number.isFinite(originalPrice) && originalPrice > 0 ? originalPrice : null,
+    rating: body.rating ? Number(body.rating) : existing.rating,
+    reviews: body.reviews !== undefined && body.reviews !== "" ? Number(body.reviews) : existing.reviews,
+    badge: body.badge && body.badge !== "none" ? body.badge : null,
+    description: desc,
+    img,
+    icon: finalIcon,
+  });
+
   res.json(product);
 });
 
 app.delete("/admin/api/products/:id", requireAdminApi, (req, res) => {
-  const idx = PRODUCTS.findIndex((p) => p.id === Number(req.params.id));
-  if (idx === -1) return res.status(404).json({ message: "상품을 찾을 수 없습니다." });
-  const [removed] = PRODUCTS.splice(idx, 1);
+  const removed = deleteProductRow(req.params.id);
+  if (!removed) return res.status(404).json({ message: "상품을 찾을 수 없습니다." });
   deleteManagedImage(removed.img);
-  saveProducts();
   res.json({ ok: true });
 });
 
+app.use("/uploads", express.static(UPLOADS_DIR));
 app.use(express.static(PUBLIC_DIR));
 
 app.get("/api/config", (req, res) => {
   res.json({ clientKey: TOSS_CLIENT_KEY });
+});
+
+// 상품 목록 (프론트엔드가 이 엔드포인트에서 실시간으로 불러옵니다)
+app.get("/api/products", (req, res) => {
+  res.json(getAllProducts());
 });
 
 app.post("/api/orders", (req, res) => {
