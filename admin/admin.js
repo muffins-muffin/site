@@ -25,6 +25,12 @@ function formatWon(n) {
   return Number(n || 0).toLocaleString("ko-KR") + "원";
 }
 
+// 로컬 디스크 저장 이미지는 "uploads/xxx.png" 같은 상대경로,
+// R2에 저장된 이미지는 이미 완전한 URL이므로 그대로 사용합니다.
+function imgSrc(imgPath) {
+  return /^https?:\/\//.test(imgPath) ? imgPath : "/" + imgPath;
+}
+
 async function api(url, options = {}) {
   const res = await fetch(url, { credentials: "same-origin", ...options });
   if (res.status === 401) {
@@ -48,7 +54,7 @@ function renderTable() {
     .sort((a, b) => b.id - a.id)
     .map((p) => {
       const thumb = p.img
-        ? `<img src="/${p.img}" alt="${p.name}">`
+        ? `<img src="${imgSrc(p.img)}" alt="${p.name}">`
         : p.icon || "🛍️";
       return `
         <tr data-id="${p.id}">
@@ -106,7 +112,7 @@ function startEdit(product) {
   form.image.value = "";
 
   if (product.img) {
-    imgPreview.src = "/" + product.img;
+    imgPreview.src = imgSrc(product.img);
     imgPreview.hidden = false;
   } else {
     imgPreview.hidden = true;

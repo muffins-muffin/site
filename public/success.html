@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>결제 완료 - SYNAP365</title>
 <link rel="stylesheet" href="style.css">
+<script src="config.js"></script>
 <style>
   .result-page { max-width: 480px; margin: 0 auto; padding: 64px 24px 80px; text-align: center; }
   .result-page .logo { justify-content: center; margin-bottom: 32px; }
@@ -54,7 +55,7 @@
         amount: urlParams.get("amount"),
       };
 
-      const response = await fetch("/api/payments/confirm", {
+      const response = await fetch(`${window.API_BASE || ""}/api/payments/confirm`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestData),

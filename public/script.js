@@ -317,7 +317,7 @@ checkoutBtn.addEventListener("click", async () => {
   checkoutBtn.disabled = true;
   checkoutBtn.textContent = "주문 생성 중...";
   try {
-    const res = await fetch("/api/orders", {
+    const res = await fetch(`${window.API_BASE || ""}/api/orders`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ items }),
@@ -401,7 +401,7 @@ if (heroTrack && heroSlideCount > 0) {
 
 // ---------- Init ----------
 renderCart();
-fetch("/api/products")
+fetch(`${window.API_BASE || ""}/api/products`)
   .then((res) => res.json())
   .then((data) => {
     PRODUCTS = data;

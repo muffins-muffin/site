@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="style.css">
 <!-- Toss Payments 결제위젯 SDK -->
 <script src="https://js.tosspayments.com/v1/payment-widget"></script>
+<script src="config.js"></script>
 <style>
   .checkout-page { max-width: 560px; margin: 0 auto; padding: 48px 24px 80px; }
   .checkout-page .logo { justify-content: center; margin-bottom: 32px; }
@@ -74,8 +75,8 @@
       }
 
       const [configRes, orderRes] = await Promise.all([
-        fetch("/api/config"),
-        fetch(`/api/orders/${encodeURIComponent(orderId)}`),
+        fetch(`${window.API_BASE || ""}/api/config`),
+        fetch(`${window.API_BASE || ""}/api/orders/${encodeURIComponent(orderId)}`),
       ]);
 
       if (!orderRes.ok) {

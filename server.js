@@ -128,6 +128,28 @@ function deleteProductRow(id) {
   return product;
 }
 
+// 프론트엔드(public/)를 Cloudflare Pages 같은 별도 도메인에 올릴 경우를 위한 CORS 설정.
+// /admin/* 은 세션 쿠키를 쓰는 관리자 전용이라 항상 이 서버와 같은 origin에서만 접속하므로
+// 대상에서 제외하고, 공개 API(/api/*)에만 적용합니다.
+// ALLOWED_ORIGIN 환경변수(콤마로 구분)에 프론트 도메인을 등록하세요. 비워두면 모든 origin을 허용합니다(개발용).
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGIN || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+app.use("/api", (req, res, next) => {
+  const origin = req.headers.origin;
+  if (ALLOWED_ORIGINS.length === 0) {
+    res.setHeader("Access-Control-Allow-Origin", origin || "*");
+  } else if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
+
 app.set("trust proxy", 1);
 app.use(express.json());
 app.use(
@@ -175,18 +197,47 @@ app.get("/admin/dashboard.html", requireAdminPage, (req, res) => res.sendFile(pa
 app.get("/admin/admin.css", requireAdminPage, (req, res) => res.sendFile(path.join(ADMIN_DIR, "admin.css")));
 app.get("/admin/admin.js", requireAdminPage, (req, res) => res.sendFile(path.join(ADMIN_DIR, "admin.js")));
 
-// ---------- 상품 이미지 업로드 ----------
+// ---------- 상품 이미지 업로드 (로컬 디스크 또는 Cloudflare R2) ----------
+// R2_* 환경변수가 모두 채워져 있으면 R2(S3 호환)에 업로드하고, 없으면 로컬 디스크(DATA_DIR/uploads)를 씁니다.
+// ⚠️ 프론트(public/)를 Cloudflare Pages 같은 별도 도메인에 올릴 계획이면 R2 설정이 필수입니다 —
+// 로컬 디스크 경로는 이 서버와 같은 origin에서만 열리기 때문에, 프론트가 분리되면 이미지가 깨집니다.
+const R2_ENABLED = !!(
+  process.env.R2_ACCOUNT_ID &&
+  process.env.R2_ACCESS_KEY_ID &&
+  process.env.R2_SECRET_ACCESS_KEY &&
+  process.env.R2_BUCKET &&
+  process.env.R2_PUBLIC_URL
+);
+
+let s3Client = null;
+if (R2_ENABLED) {
+  const { S3Client } = require("@aws-sdk/client-s3");
+  s3Client = new S3Client({
+    region: "auto",
+    endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    credentials: {
+      accessKeyId: process.env.R2_ACCESS_KEY_ID,
+      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+    },
+  });
+  console.log(`[이미지 저장소] Cloudflare R2 사용 중 (버킷: ${process.env.R2_BUCKET})`);
+} else {
+  console.log("[이미지 저장소] 로컬 디스크 사용 중 (R2_* 환경변수 없음)");
+}
+
 const ALLOWED_EXT = [".png", ".jpg", ".jpeg", ".webp", ".gif"];
 const upload = multer({
-  storage: multer.diskStorage({
-    destination: (req, file, cb) => cb(null, UPLOADS_DIR),
-    filename: (req, file, cb) => {
-      const ext = ALLOWED_EXT.includes(path.extname(file.originalname).toLowerCase())
-        ? path.extname(file.originalname).toLowerCase()
-        : ".png";
-      cb(null, `product_${Date.now()}_${crypto.randomBytes(4).toString("hex")}${ext}`);
-    },
-  }),
+  storage: R2_ENABLED
+    ? multer.memoryStorage()
+    : multer.diskStorage({
+        destination: (req, file, cb) => cb(null, UPLOADS_DIR),
+        filename: (req, file, cb) => {
+          const ext = ALLOWED_EXT.includes(path.extname(file.originalname).toLowerCase())
+            ? path.extname(file.originalname).toLowerCase()
+            : ".png";
+          cb(null, `product_${Date.now()}_${crypto.randomBytes(4).toString("hex")}${ext}`);
+        },
+      }),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     if (/^image\//.test(file.mimetype)) return cb(null, true);
@@ -194,9 +245,47 @@ const upload = multer({
   },
 });
 
-function deleteManagedImage(imgPath) {
-  if (imgPath && imgPath.startsWith("uploads/")) {
-    fs.unlink(path.join(DATA_DIR, imgPath), () => {});
+// 검증 실패 시, 로컬 디스크에 이미 쓰여진 임시 업로드 파일을 정리합니다 (R2 모드는 메모리에만 있어 필요 없음).
+function cleanupUploadedFile(req) {
+  if (req.file && req.file.path) fs.unlink(req.file.path, () => {});
+}
+
+// 업로드된 파일을 최종 저장소에 반영하고, products.img에 저장할 값을 반환합니다.
+async function saveUploadedImage(file) {
+  if (!file) return null;
+  if (R2_ENABLED) {
+    const { PutObjectCommand } = require("@aws-sdk/client-s3");
+    const ext = ALLOWED_EXT.includes(path.extname(file.originalname).toLowerCase())
+      ? path.extname(file.originalname).toLowerCase()
+      : ".png";
+    const key = `products/product_${Date.now()}_${crypto.randomBytes(4).toString("hex")}${ext}`;
+    await s3Client.send(
+      new PutObjectCommand({
+        Bucket: process.env.R2_BUCKET,
+        Key: key,
+        Body: file.buffer,
+        ContentType: file.mimetype,
+      })
+    );
+    return `${process.env.R2_PUBLIC_URL.replace(/\/$/, "")}/${key}`;
+  }
+  return `uploads/${file.filename}`;
+}
+
+// 상품 삭제/교체 시 기존 이미지를 정리합니다.
+async function deleteStoredImage(imgRef) {
+  if (!imgRef) return;
+  if (/^https?:\/\//.test(imgRef)) {
+    if (!R2_ENABLED) return; // R2로 저장된 이미지인데 지금은 R2 설정이 없으면 건드리지 않음
+    const { DeleteObjectCommand } = require("@aws-sdk/client-s3");
+    const key = imgRef.replace(`${process.env.R2_PUBLIC_URL.replace(/\/$/, "")}/`, "");
+    try {
+      await s3Client.send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET, Key: key }));
+    } catch (err) {
+      console.error("R2 이미지 삭제 실패:", err);
+    }
+  } else if (imgRef.startsWith("uploads/")) {
+    fs.unlink(path.join(DATA_DIR, imgRef), () => {});
   }
 }
 
@@ -205,7 +294,7 @@ app.get("/admin/api/products", requireAdminApi, (req, res) => {
   res.json(getAllProducts());
 });
 
-app.post("/admin/api/products", requireAdminApi, upload.single("image"), (req, res) => {
+app.post("/admin/api/products", requireAdminApi, upload.single("image"), async (req, res) => {
   const body = req.body || {};
   const name = (body.name || "").trim();
   const cat = body.cat;
@@ -214,33 +303,39 @@ app.post("/admin/api/products", requireAdminApi, upload.single("image"), (req, r
   const icon = (body.icon || "").trim();
 
   if (!name || !CATEGORY_LABELS[cat] || !desc || !Number.isFinite(price) || price <= 0 || (!req.file && !icon)) {
-    if (req.file) fs.unlink(req.file.path, () => {});
+    cleanupUploadedFile(req);
     return res.status(400).json({ message: "이름·카테고리·설명·가격을 확인하고, 이미지를 업로드하거나 아이콘을 입력해주세요." });
   }
 
-  const originalPrice = body.originalPrice ? Number(body.originalPrice) : null;
+  try {
+    const originalPrice = body.originalPrice ? Number(body.originalPrice) : null;
+    const img = await saveUploadedImage(req.file);
 
-  const product = insertProduct({
-    name,
-    cat,
-    catLabel: CATEGORY_LABELS[cat],
-    price,
-    originalPrice: Number.isFinite(originalPrice) && originalPrice > 0 ? originalPrice : null,
-    rating: body.rating ? Number(body.rating) : 5.0,
-    reviews: body.reviews ? Number(body.reviews) : 0,
-    badge: body.badge && body.badge !== "none" ? body.badge : null,
-    description: desc,
-    img: req.file ? `uploads/${req.file.filename}` : null,
-    icon: req.file ? null : icon,
-  });
+    const product = insertProduct({
+      name,
+      cat,
+      catLabel: CATEGORY_LABELS[cat],
+      price,
+      originalPrice: Number.isFinite(originalPrice) && originalPrice > 0 ? originalPrice : null,
+      rating: body.rating ? Number(body.rating) : 5.0,
+      reviews: body.reviews ? Number(body.reviews) : 0,
+      badge: body.badge && body.badge !== "none" ? body.badge : null,
+      description: desc,
+      img,
+      icon: img ? null : icon,
+    });
 
-  res.status(201).json(product);
+    res.status(201).json(product);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "이미지 업로드 중 오류가 발생했습니다." });
+  }
 });
 
-app.put("/admin/api/products/:id", requireAdminApi, upload.single("image"), (req, res) => {
+app.put("/admin/api/products/:id", requireAdminApi, upload.single("image"), async (req, res) => {
   const existing = findProduct(req.params.id);
   if (!existing) {
-    if (req.file) fs.unlink(req.file.path, () => {});
+    cleanupUploadedFile(req);
     return res.status(404).json({ message: "상품을 찾을 수 없습니다." });
   }
 
@@ -252,43 +347,48 @@ app.put("/admin/api/products/:id", requireAdminApi, upload.single("image"), (req
   const icon = (body.icon || "").trim();
 
   if (!name || !CATEGORY_LABELS[cat] || !desc || !Number.isFinite(price) || price <= 0) {
-    if (req.file) fs.unlink(req.file.path, () => {});
+    cleanupUploadedFile(req);
     return res.status(400).json({ message: "이름·카테고리·설명·가격을 확인해주세요." });
   }
 
-  const originalPrice = body.originalPrice ? Number(body.originalPrice) : null;
+  try {
+    const originalPrice = body.originalPrice ? Number(body.originalPrice) : null;
 
-  let img = existing.img || null;
-  let finalIcon = existing.icon || null;
-  if (req.file) {
-    deleteManagedImage(existing.img);
-    img = `uploads/${req.file.filename}`;
-    finalIcon = null;
-  } else if (icon && !existing.img) {
-    finalIcon = icon;
+    let img = existing.img || null;
+    let finalIcon = existing.icon || null;
+    if (req.file) {
+      await deleteStoredImage(existing.img);
+      img = await saveUploadedImage(req.file);
+      finalIcon = null;
+    } else if (icon && !existing.img) {
+      finalIcon = icon;
+    }
+
+    const product = updateProductRow(existing.id, {
+      name,
+      cat,
+      catLabel: CATEGORY_LABELS[cat],
+      price,
+      originalPrice: Number.isFinite(originalPrice) && originalPrice > 0 ? originalPrice : null,
+      rating: body.rating ? Number(body.rating) : existing.rating,
+      reviews: body.reviews !== undefined && body.reviews !== "" ? Number(body.reviews) : existing.reviews,
+      badge: body.badge && body.badge !== "none" ? body.badge : null,
+      description: desc,
+      img,
+      icon: finalIcon,
+    });
+
+    res.json(product);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "이미지 업로드 중 오류가 발생했습니다." });
   }
-
-  const product = updateProductRow(existing.id, {
-    name,
-    cat,
-    catLabel: CATEGORY_LABELS[cat],
-    price,
-    originalPrice: Number.isFinite(originalPrice) && originalPrice > 0 ? originalPrice : null,
-    rating: body.rating ? Number(body.rating) : existing.rating,
-    reviews: body.reviews !== undefined && body.reviews !== "" ? Number(body.reviews) : existing.reviews,
-    badge: body.badge && body.badge !== "none" ? body.badge : null,
-    description: desc,
-    img,
-    icon: finalIcon,
-  });
-
-  res.json(product);
 });
 
-app.delete("/admin/api/products/:id", requireAdminApi, (req, res) => {
+app.delete("/admin/api/products/:id", requireAdminApi, async (req, res) => {
   const removed = deleteProductRow(req.params.id);
   if (!removed) return res.status(404).json({ message: "상품을 찾을 수 없습니다." });
-  deleteManagedImage(removed.img);
+  await deleteStoredImage(removed.img);
   res.json({ ok: true });
 });
 
