@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>관리자 로그인 · SYNAP365</title>
+<style>
+  :root {
+    --primary: #2563eb;
+    --primary-dark: #1d4ed8;
+    --ink: #1a1a2e;
+    --ink-soft: #55586b;
+    --bg-soft: #f7f7fb;
+    --border: #eaeaf0;
+    --radius: 14px;
+    --shadow-lg: 0 10px 40px rgba(20, 20, 40, 0.14);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Malgun Gothic", sans-serif;
+    background: linear-gradient(160deg, var(--ink), #33365a);
+  }
+  .card {
+    width: 100%;
+    max-width: 360px;
+    background: #fff;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
+    padding: 40px 32px;
+  }
+  .logo {
+    font-weight: 800;
+    font-size: 1.3rem;
+    color: var(--ink);
+    text-align: center;
+    letter-spacing: -0.02em;
+  }
+  .subtitle {
+    text-align: center;
+    color: var(--ink-soft);
+    font-size: 0.88rem;
+    margin: 6px 0 28px;
+  }
+  label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--ink);
+    margin-bottom: 8px;
+  }
+  input[type="password"] {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    font-size: 0.95rem;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  input[type="password"]:focus { border-color: var(--primary); }
+  button {
+    width: 100%;
+    margin-top: 18px;
+    padding: 12px;
+    border: none;
+    border-radius: 10px;
+    background: var(--primary);
+    color: #fff;
+    font-size: 0.95rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  button:hover { background: var(--primary-dark); }
+  button:disabled { opacity: 0.6; cursor: default; }
+  .error {
+    margin-top: 14px;
+    font-size: 0.85rem;
+    color: #dc2626;
+    text-align: center;
+    min-height: 1.1em;
+  }
+</style>
+</head>
+<body>
+  <form class="card" id="loginForm">
+    <div class="logo">SYNAP365</div>
+    <p class="subtitle">관리자 로그인</p>
+    <label for="password">비밀번호</label>
+    <input type="password" id="password" name="password" autocomplete="current-password" autofocus required>
+    <button type="submit" id="submitBtn">로그인</button>
+    <p class="error" id="errorMsg"></p>
+  </form>
+
+  <script>
+    const form = document.getElementById("loginForm");
+    const errorMsg = document.getElementById("errorMsg");
+    const submitBtn = document.getElementById("submitBtn");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errorMsg.textContent = "";
+      submitBtn.disabled = true;
+      submitBtn.textContent = "로그인 중...";
+      try {
+        const res = await fetch("/admin/api/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password: document.getElementById("password").value }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          window.location.href = "/admin/dashboard.html";
+        } else {
+          errorMsg.textContent = data.message || "로그인에 실패했습니다.";
+        }
+      } catch (err) {
+        errorMsg.textContent = "서버에 연결할 수 없습니다.";
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "로그인";
+      }
+    });
+  </script>
+</body>
+</html>
