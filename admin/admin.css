@@ -145,6 +145,20 @@ body {
 
 .panel-divider { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
 
+.detail-content-group {
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  padding: 18px 18px 6px;
+  margin-bottom: 16px;
+  background: var(--bg-soft);
+}
+.detail-content-group .detail-images-section {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px dashed var(--border);
+}
+#detailContentHint { margin-top: 4px; }
+
 .detail-images-section label { font-size: 0.82rem; font-weight: 600; color: var(--ink); }
 .detail-image-grid {
   display: grid;

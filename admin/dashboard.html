@@ -49,9 +49,29 @@
           </div>
         </div>
 
-        <div class="field">
-          <label for="f-desc">상세 설명 *</label>
-          <textarea id="f-desc" name="desc" required rows="4" maxlength="1000" placeholder="상품 상세 페이지에 노출될 설명을 입력하세요."></textarea>
+        <div class="detail-content-group">
+          <div class="field">
+            <label for="f-desc">상세 설명 *</label>
+            <textarea id="f-desc" name="desc" required rows="4" maxlength="1000" placeholder="상품 상세 페이지에 노출될 설명을 입력하세요."></textarea>
+          </div>
+
+          <div id="detailImagesSection" class="detail-images-section" hidden>
+            <label>상세설명 이미지 <span class="hint-inline">(순서대로 상품 상세페이지에 쭉 나열됩니다)</span></label>
+            <div id="detailImageGrid" class="detail-image-grid"></div>
+            <input type="file" id="detailImageInput" accept="image/*" multiple>
+            <button type="button" id="uploadDetailImagesBtn" class="btn btn-ghost btn-small">이미지 업로드</button>
+            <p class="form-error" id="detailImageError"></p>
+          </div>
+
+          <div id="filesSection" class="detail-images-section" hidden>
+            <label>첨부파일 <span class="hint-inline">(설명서·스펙시트 등, 고객이 다운로드할 수 있습니다)</span></label>
+            <ul id="fileList" class="file-list"></ul>
+            <input type="file" id="fileInput" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.hwp,.zip,.txt,.csv,image/*" multiple>
+            <button type="button" id="uploadFilesBtn" class="btn btn-ghost btn-small">파일 업로드</button>
+            <p class="form-error" id="fileError"></p>
+          </div>
+
+          <p class="hint" id="detailContentHint">이미지·첨부파일 업로드는 상품을 먼저 등록한 뒤 이어서 추가할 수 있어요.</p>
         </div>
 
         <div class="form-row">
@@ -111,24 +131,6 @@
         </div>
         <p class="form-error" id="formError"></p>
       </form>
-
-      <div id="detailImagesSection" class="detail-images-section" hidden>
-        <hr class="panel-divider">
-        <label>상세설명 이미지 <span class="hint-inline">(순서대로 상품 상세페이지에 쭉 나열됩니다)</span></label>
-        <div id="detailImageGrid" class="detail-image-grid"></div>
-        <input type="file" id="detailImageInput" accept="image/*" multiple>
-        <button type="button" id="uploadDetailImagesBtn" class="btn btn-ghost btn-small">이미지 업로드</button>
-        <p class="form-error" id="detailImageError"></p>
-      </div>
-
-      <div id="filesSection" class="detail-images-section" hidden>
-        <hr class="panel-divider">
-        <label>첨부파일 <span class="hint-inline">(설명서·스펙시트 등, 고객이 다운로드할 수 있습니다)</span></label>
-        <ul id="fileList" class="file-list"></ul>
-        <input type="file" id="fileInput" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.hwp,.zip,.txt,.csv,image/*" multiple>
-        <button type="button" id="uploadFilesBtn" class="btn btn-ghost btn-small">파일 업로드</button>
-        <p class="form-error" id="fileError"></p>
-      </div>
     </section>
 
     <section class="panel">
