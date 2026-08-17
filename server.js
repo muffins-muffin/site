@@ -63,7 +63,8 @@ db.exec(`
     description TEXT NOT NULL,
     options TEXT NOT NULL DEFAULT '[]',
     detailImages TEXT NOT NULL DEFAULT '[]',
-    hidden INTEGER NOT NULL DEFAULT 0
+    hidden INTEGER NOT NULL DEFAULT 0,
+    files TEXT NOT NULL DEFAULT '[]'
   )
 `);
 
@@ -81,6 +82,7 @@ if (!existingColumns.has("displayName")) {
 addColumnIfMissing("options", "options TEXT NOT NULL DEFAULT '[]'");
 addColumnIfMissing("detailImages", "detailImages TEXT NOT NULL DEFAULT '[]'");
 addColumnIfMissing("hidden", "hidden INTEGER NOT NULL DEFAULT 0");
+addColumnIfMissing("files", "files TEXT NOT NULL DEFAULT '[]'");
 
 // ---------- 사이트 공통 설정 (배송/교환/반품 안내) ----------
 db.exec(`
@@ -148,7 +150,7 @@ if (db.prepare("SELECT COUNT(*) AS n FROM products").get().n === 0) {
 
 function rowToProduct(row) {
   if (!row) return row;
-  const { description, img, icon, options, detailImages, hidden, ...rest } = row;
+  const { description, img, icon, options, detailImages, hidden, files, ...rest } = row;
   const product = { ...rest, desc: description, hidden: !!hidden };
   if (img) product.img = img;
   if (icon) product.icon = icon;
@@ -161,6 +163,11 @@ function rowToProduct(row) {
     product.detailImages = JSON.parse(detailImages || "[]");
   } catch {
     product.detailImages = [];
+  }
+  try {
+    product.files = JSON.parse(files || "[]");
+  } catch {
+    product.files = [];
   }
   return product;
 }
@@ -198,6 +205,10 @@ function updateProductRow(id, data) {
 }
 function updateProductDetailImages(id, detailImages) {
   db.prepare("UPDATE products SET detailImages = ? WHERE id = ?").run(JSON.stringify(detailImages), Number(id));
+  return findProduct(id);
+}
+function updateProductFiles(id, files) {
+  db.prepare("UPDATE products SET files = ? WHERE id = ?").run(JSON.stringify(files), Number(id));
   return findProduct(id);
 }
 // 판매중지(숨김)/다시 판매. 데이터는 그대로 보관되고 고객 화면에서만 빠집니다.
@@ -359,21 +370,85 @@ async function saveUploadedImage(file) {
   return `uploads/${file.filename}`;
 }
 
-// 상품 삭제/교체 시 기존 이미지를 정리합니다.
-async function deleteStoredImage(imgRef) {
-  if (!imgRef) return;
-  if (/^https?:\/\//.test(imgRef)) {
-    if (!R2_ENABLED) return; // R2로 저장된 이미지인데 지금은 R2 설정이 없으면 건드리지 않음
+// 상품 삭제/교체 시 기존 이미지·첨부파일을 정리합니다. (이미지/첨부파일 공용)
+async function deleteStoredObject(ref) {
+  if (!ref) return;
+  if (/^https?:\/\//.test(ref)) {
+    if (!R2_ENABLED) return; // R2로 저장된 객체인데 지금은 R2 설정이 없으면 건드리지 않음
     const { DeleteObjectCommand } = require("@aws-sdk/client-s3");
-    const key = imgRef.replace(`${process.env.R2_PUBLIC_URL.replace(/\/$/, "")}/`, "");
+    const key = ref.replace(`${process.env.R2_PUBLIC_URL.replace(/\/$/, "")}/`, "");
     try {
       await s3Client.send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET, Key: key }));
     } catch (err) {
-      console.error("R2 이미지 삭제 실패:", err);
+      console.error("R2 객체 삭제 실패:", err);
     }
-  } else if (imgRef.startsWith("uploads/")) {
-    fs.unlink(path.join(DATA_DIR, imgRef), () => {});
+  } else {
+    // 로컬 디스크에 저장된 상대경로(uploads/..., files/...)만 지웁니다.
+    fs.unlink(path.join(DATA_DIR, ref), () => {});
   }
+}
+
+// ---------- 상품 첨부파일 업로드 (설명서·스펙시트 등, 이미지가 아닌 일반 파일) ----------
+const FILES_DIR = path.join(DATA_DIR, "files");
+fs.mkdirSync(FILES_DIR, { recursive: true });
+const ALLOWED_FILE_EXT = [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".hwp", ".zip", ".txt", ".csv", ".png", ".jpg", ".jpeg"];
+
+const uploadFile = multer({
+  storage: R2_ENABLED
+    ? multer.memoryStorage()
+    : multer.diskStorage({
+        destination: (req, file, cb) => cb(null, FILES_DIR),
+        filename: (req, file, cb) => {
+          const ext = path.extname(file.originalname).toLowerCase();
+          cb(null, `file_${Date.now()}_${crypto.randomBytes(4).toString("hex")}${ALLOWED_FILE_EXT.includes(ext) ? ext : ""}`);
+        },
+      }),
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ALLOWED_FILE_EXT.includes(ext)) return cb(null, true);
+    cb(new Error("지원하지 않는 파일 형식입니다. (pdf, doc, xls, ppt, hwp, zip, txt, csv, 이미지)"));
+  },
+});
+
+// multer(busboy)가 한글 등 비-ASCII 파일명을 종종 latin1로 잘못 디코딩해서 넘겨줍니다
+// (모든 글자가 0xFF 이하인 경우에만 해당) — 원래 UTF-8 바이트로 다시 해석해 복구합니다.
+function fixMulterFilename(name) {
+  if (!name || [...name].some((ch) => ch.codePointAt(0) > 0xff)) return name;
+  try {
+    const fixed = Buffer.from(name, "latin1").toString("utf8");
+    return fixed.includes("�") ? name : fixed;
+  } catch {
+    return name;
+  }
+}
+
+// 한글 파일명도 안전하게 다운로드되도록 Content-Disposition 값을 만듭니다.
+function contentDispositionValue(filename) {
+  const asciiFallback = filename.replace(/[^\x20-\x7E]/g, "_");
+  return `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+}
+
+// 업로드된 첨부파일을 최종 저장소에 반영하고, products.files[].ref에 저장할 값을 반환합니다.
+// (이미지와 달리 다운로드 시 원본 파일명이 그대로 뜨도록 R2에는 Content-Disposition을 함께 저장합니다.)
+async function saveUploadedFile(file) {
+  if (!file) return null;
+  if (R2_ENABLED) {
+    const { PutObjectCommand } = require("@aws-sdk/client-s3");
+    const ext = path.extname(file.originalname).toLowerCase();
+    const key = `files/file_${Date.now()}_${crypto.randomBytes(4).toString("hex")}${ALLOWED_FILE_EXT.includes(ext) ? ext : ""}`;
+    await s3Client.send(
+      new PutObjectCommand({
+        Bucket: process.env.R2_BUCKET,
+        Key: key,
+        Body: file.buffer,
+        ContentType: file.mimetype,
+        ContentDisposition: contentDispositionValue(fixMulterFilename(file.originalname)),
+      })
+    );
+    return `${process.env.R2_PUBLIC_URL.replace(/\/$/, "")}/${key}`;
+  }
+  return `files/${file.filename}`;
 }
 
 // 상품 옵션(옵션명 + 추가금액) JSON 문자열을 검증합니다. 폼에서 [{ "name": "블랙", "priceDelta": 0 }, ...] 형태로 보냅니다.
@@ -481,7 +556,7 @@ app.put("/admin/api/products/:id", requireAdminApi, upload.single("image"), asyn
     let img = existing.img || null;
     let finalIcon = existing.icon || null;
     if (req.file) {
-      await deleteStoredImage(existing.img);
+      await deleteStoredObject(existing.img);
       img = await saveUploadedImage(req.file);
       finalIcon = null;
     } else if (icon && !existing.img) {
@@ -529,8 +604,9 @@ app.post("/admin/api/products/:id/restore", requireAdminApi, (req, res) => {
 app.delete("/admin/api/products/:id/permanent", requireAdminApi, async (req, res) => {
   const removed = deleteProductRow(req.params.id);
   if (!removed) return res.status(404).json({ message: "상품을 찾을 수 없습니다." });
-  await deleteStoredImage(removed.img);
-  await Promise.all((removed.detailImages || []).map((ref) => deleteStoredImage(ref)));
+  await deleteStoredObject(removed.img);
+  await Promise.all((removed.detailImages || []).map((ref) => deleteStoredObject(ref)));
+  await Promise.all((removed.files || []).map((f) => deleteStoredObject(f.ref)));
   res.json({ ok: true });
 });
 
@@ -568,12 +644,69 @@ app.delete("/admin/api/products/:id/detail-images", requireAdminApi, async (req,
     return res.status(400).json({ message: "삭제할 이미지를 찾을 수 없습니다." });
   }
 
-  await deleteStoredImage(target);
+  await deleteStoredObject(target);
   const product = updateProductDetailImages(
     existing.id,
     existing.detailImages.filter((ref) => ref !== target)
   );
   res.json(product);
+});
+
+// 첨부파일(설명서, 스펙시트 등) 추가/삭제
+app.post("/admin/api/products/:id/files", requireAdminApi, uploadFile.array("files", 10), async (req, res) => {
+  const existing = findProduct(req.params.id);
+  const uploaded = req.files || [];
+  if (!existing) {
+    await Promise.all(uploaded.map((f) => (f.path ? fs.promises.unlink(f.path).catch(() => {}) : null)));
+    return res.status(404).json({ message: "상품을 찾을 수 없습니다." });
+  }
+  if (uploaded.length === 0) {
+    return res.status(400).json({ message: "업로드할 파일을 선택해주세요." });
+  }
+
+  try {
+    const newFiles = [];
+    for (const file of uploaded) {
+      newFiles.push({ name: fixMulterFilename(file.originalname), ref: await saveUploadedFile(file) });
+    }
+    const product = updateProductFiles(existing.id, [...(existing.files || []), ...newFiles]);
+    res.status(201).json(product);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "파일 업로드 중 오류가 발생했습니다." });
+  }
+});
+
+app.delete("/admin/api/products/:id/files", requireAdminApi, async (req, res) => {
+  const existing = findProduct(req.params.id);
+  if (!existing) return res.status(404).json({ message: "상품을 찾을 수 없습니다." });
+
+  const target = req.body && req.body.ref;
+  const match = (existing.files || []).find((f) => f.ref === target);
+  if (!target || !match) {
+    return res.status(400).json({ message: "삭제할 파일을 찾을 수 없습니다." });
+  }
+
+  await deleteStoredObject(target);
+  const product = updateProductFiles(
+    existing.id,
+    existing.files.filter((f) => f.ref !== target)
+  );
+  res.json(product);
+});
+
+// 첨부파일 다운로드 (원본 파일명으로 내려받도록 처리). 로그인 없이도 접근 가능해야 하는 공개 다운로드 링크입니다.
+app.get("/product-files/:id/:index", (req, res) => {
+  const product = findProduct(req.params.id);
+  const file = product && (product.files || [])[Number(req.params.index)];
+  if (!file) return res.status(404).send("파일을 찾을 수 없습니다.");
+
+  if (/^https?:\/\//.test(file.ref)) {
+    return res.redirect(file.ref);
+  }
+  res.download(path.join(DATA_DIR, file.ref), file.name, (err) => {
+    if (err && !res.headersSent) res.status(404).send("파일을 찾을 수 없습니다.");
+  });
 });
 
 // ---------- 사이트 공통 설정 (배송/교환/반품 안내) ----------

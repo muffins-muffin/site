@@ -19,6 +19,12 @@ const detailImageInput = document.getElementById("detailImageInput");
 const uploadDetailImagesBtn = document.getElementById("uploadDetailImagesBtn");
 const detailImageError = document.getElementById("detailImageError");
 
+const filesSection = document.getElementById("filesSection");
+const fileList = document.getElementById("fileList");
+const fileInput = document.getElementById("fileInput");
+const uploadFilesBtn = document.getElementById("uploadFilesBtn");
+const fileError = document.getElementById("fileError");
+
 const settingsForm = document.getElementById("settingsForm");
 const settingsSubmitBtn = document.getElementById("settingsSubmitBtn");
 const settingsError = document.getElementById("settingsError");
@@ -208,6 +214,72 @@ detailImageGrid.addEventListener("click", async (e) => {
   }
 });
 
+// ---------- 첨부파일 (설명서·스펙시트 등) ----------
+function renderFiles(files) {
+  fileList.innerHTML = (files || [])
+    .map(
+      (f) => `
+      <li data-ref="${escapeHtml(f.ref)}">
+        <a href="/product-files/${editingId}/${(files || []).indexOf(f)}" target="_blank" rel="noopener">📎 ${escapeHtml(f.name)}</a>
+        <button type="button" data-remove-file aria-label="삭제">삭제</button>
+      </li>`
+    )
+    .join("");
+}
+
+uploadFilesBtn.addEventListener("click", async () => {
+  if (!editingId) return;
+  fileError.textContent = "";
+  const files = fileInput.files;
+  if (!files || files.length === 0) {
+    fileError.textContent = "업로드할 파일을 선택해주세요.";
+    return;
+  }
+  const fd = new FormData();
+  for (const file of files) fd.append("files", file);
+
+  uploadFilesBtn.disabled = true;
+  uploadFilesBtn.textContent = "업로드 중...";
+  try {
+    const res = await api(`/admin/api/products/${editingId}/files`, { method: "POST", body: fd });
+    const data = await res.json();
+    if (!res.ok) {
+      fileError.textContent = data.message || "업로드에 실패했습니다.";
+      return;
+    }
+    renderFiles(data.files);
+    fileInput.value = "";
+    const idx = products.findIndex((p) => p.id === editingId);
+    if (idx !== -1) products[idx] = data;
+    showToast("첨부파일을 추가했습니다.");
+  } catch (err) {
+    if (err.message !== "unauthorized") fileError.textContent = "서버에 연결할 수 없습니다.";
+  } finally {
+    uploadFilesBtn.disabled = false;
+    uploadFilesBtn.textContent = "파일 업로드";
+  }
+});
+
+fileList.addEventListener("click", async (e) => {
+  const btn = e.target.closest("[data-remove-file]");
+  if (!btn || !editingId) return;
+  const ref = btn.closest("li").dataset.ref;
+  try {
+    const res = await api(`/admin/api/products/${editingId}/files`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ref }),
+    });
+    const data = await res.json();
+    if (!res.ok) return showToast(data.message || "삭제에 실패했습니다.");
+    renderFiles(data.files);
+    const idx = products.findIndex((p) => p.id === editingId);
+    if (idx !== -1) products[idx] = data;
+  } catch (err) {
+    // unauthorized already redirects
+  }
+});
+
 // ---------- 상품 등록/수정 폼 ----------
 function resetForm() {
   editingId = null;
@@ -221,6 +293,8 @@ function resetForm() {
   renderOptionRows([]);
   detailImagesSection.hidden = true;
   renderDetailImages([]);
+  filesSection.hidden = true;
+  renderFiles([]);
 }
 
 function startEdit(product) {
@@ -252,6 +326,8 @@ function startEdit(product) {
   renderOptionRows(product.options || []);
   detailImagesSection.hidden = false;
   renderDetailImages(product.detailImages || []);
+  filesSection.hidden = false;
+  renderFiles(product.files || []);
 
   window.scrollTo({ top: 0, behavior: "smooth" });
 }

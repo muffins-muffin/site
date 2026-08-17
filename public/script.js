@@ -251,6 +251,16 @@ function openProductModal(id) {
       ? `<div class="modal-detail-images">${p.detailImages.map((ref) => `<img src="${ref}" alt="상세 이미지" loading="lazy">`).join("")}</div>`
       : "";
 
+  const filesHtml =
+    p.files && p.files.length
+      ? `<ul class="modal-files">${p.files
+          .map(
+            (f, i) =>
+              `<li><a href="${window.API_BASE || ""}/product-files/${p.id}/${i}" target="_blank" rel="noopener">📎 ${f.name}</a></li>`
+          )
+          .join("")}</ul>`
+      : "";
+
   const policyHtml = SETTINGS
     ? `
       <div class="modal-policy">
@@ -282,6 +292,7 @@ function openProductModal(id) {
         <button class="btn btn-primary" data-modal-add="${p.id}">장바구니 담기</button>
         <button class="btn btn-ghost" data-wish="${p.id}">${ICON_HEART(state.wishlist.has(p.id))}<span>${state.wishlist.has(p.id) ? "위시완료" : "위시추가"}</span></button>
       </div>
+      ${filesHtml}
       ${detailImagesHtml}
       ${policyHtml}
     </div>

@@ -120,6 +120,15 @@
         <button type="button" id="uploadDetailImagesBtn" class="btn btn-ghost btn-small">이미지 업로드</button>
         <p class="form-error" id="detailImageError"></p>
       </div>
+
+      <div id="filesSection" class="detail-images-section" hidden>
+        <hr class="panel-divider">
+        <label>첨부파일 <span class="hint-inline">(설명서·스펙시트 등, 고객이 다운로드할 수 있습니다)</span></label>
+        <ul id="fileList" class="file-list"></ul>
+        <input type="file" id="fileInput" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.hwp,.zip,.txt,.csv,image/*" multiple>
+        <button type="button" id="uploadFilesBtn" class="btn btn-ghost btn-small">파일 업로드</button>
+        <p class="form-error" id="fileError"></p>
+      </div>
     </section>
 
     <section class="panel">
