@@ -62,7 +62,8 @@ db.exec(`
     badge TEXT,
     description TEXT NOT NULL,
     options TEXT NOT NULL DEFAULT '[]',
-    detailImages TEXT NOT NULL DEFAULT '[]'
+    detailImages TEXT NOT NULL DEFAULT '[]',
+    hidden INTEGER NOT NULL DEFAULT 0
   )
 `);
 
@@ -79,6 +80,7 @@ if (!existingColumns.has("displayName")) {
 }
 addColumnIfMissing("options", "options TEXT NOT NULL DEFAULT '[]'");
 addColumnIfMissing("detailImages", "detailImages TEXT NOT NULL DEFAULT '[]'");
+addColumnIfMissing("hidden", "hidden INTEGER NOT NULL DEFAULT 0");
 
 // ---------- 사이트 공통 설정 (배송/교환/반품 안내) ----------
 db.exec(`
@@ -120,8 +122,8 @@ function updateSettings({ shippingInfo, returnExchangeInfo }) {
 if (db.prepare("SELECT COUNT(*) AS n FROM products").get().n === 0) {
   const seed = JSON.parse(fs.readFileSync(path.join(PUBLIC_DIR, "products.json"), "utf-8"));
   const insertSeed = db.prepare(`
-    INSERT INTO products (id, name, displayName, cat, catLabel, img, icon, price, originalPrice, rating, reviews, badge, description, options, detailImages)
-    VALUES (@id, @name, @displayName, @cat, @catLabel, @img, @icon, @price, @originalPrice, @rating, @reviews, @badge, @description, @options, @detailImages)
+    INSERT INTO products (id, name, displayName, cat, catLabel, img, icon, price, originalPrice, rating, reviews, badge, description, options, detailImages, hidden)
+    VALUES (@id, @name, @displayName, @cat, @catLabel, @img, @icon, @price, @originalPrice, @rating, @reviews, @badge, @description, @options, @detailImages, 0)
   `);
   const seedAll = db.transaction((rows) => {
     for (const r of rows) {
@@ -146,8 +148,8 @@ if (db.prepare("SELECT COUNT(*) AS n FROM products").get().n === 0) {
 
 function rowToProduct(row) {
   if (!row) return row;
-  const { description, img, icon, options, detailImages, ...rest } = row;
-  const product = { ...rest, desc: description };
+  const { description, img, icon, options, detailImages, hidden, ...rest } = row;
+  const product = { ...rest, desc: description, hidden: !!hidden };
   if (img) product.img = img;
   if (icon) product.icon = icon;
   try {
@@ -163,8 +165,13 @@ function rowToProduct(row) {
   return product;
 }
 
-function getAllProducts() {
-  return db.prepare("SELECT * FROM products ORDER BY id").all().map(rowToProduct);
+// includeHidden=false(기본값)면 판매중지(숨김) 상품은 제외합니다 — 고객용 목록에서 사용.
+// 관리자 목록은 includeHidden=true로 호출해 판매중지 상품도 함께 보여줍니다.
+function getAllProducts(includeHidden = false) {
+  const sql = includeHidden
+    ? "SELECT * FROM products ORDER BY id"
+    : "SELECT * FROM products WHERE hidden = 0 ORDER BY id";
+  return db.prepare(sql).all().map(rowToProduct);
 }
 function findProduct(id) {
   return rowToProduct(db.prepare("SELECT * FROM products WHERE id = ?").get(Number(id)));
@@ -193,6 +200,14 @@ function updateProductDetailImages(id, detailImages) {
   db.prepare("UPDATE products SET detailImages = ? WHERE id = ?").run(JSON.stringify(detailImages), Number(id));
   return findProduct(id);
 }
+// 판매중지(숨김)/다시 판매. 데이터는 그대로 보관되고 고객 화면에서만 빠집니다.
+function setProductHidden(id, hidden) {
+  const product = findProduct(id);
+  if (!product) return null;
+  db.prepare("UPDATE products SET hidden = ? WHERE id = ?").run(hidden ? 1 : 0, Number(id));
+  return findProduct(id);
+}
+// 완전 삭제 (되돌릴 수 없음) — 판매중지 상태의 상품에서만 사용합니다.
 function deleteProductRow(id) {
   const product = findProduct(id);
   if (!product) return null;
@@ -378,7 +393,7 @@ function parseOptions(raw) {
 
 // ---------- 관리자 상품 API ----------
 app.get("/admin/api/products", requireAdminApi, (req, res) => {
-  res.json(getAllProducts());
+  res.json(getAllProducts(true)); // 판매중지 상품도 함께 보여줍니다.
 });
 
 app.post("/admin/api/products", requireAdminApi, upload.single("image"), async (req, res) => {
@@ -496,7 +511,22 @@ app.put("/admin/api/products/:id", requireAdminApi, upload.single("image"), asyn
   }
 });
 
-app.delete("/admin/api/products/:id", requireAdminApi, async (req, res) => {
+// "삭제" = 판매중지. 고객 화면(/api/products)에서만 빠지고, 데이터/이미지는 그대로 보관됩니다.
+// 관리자 목록에서 언제든 "다시 판매"로 복구하거나, "영구 삭제"로 완전히 지울 수 있습니다.
+app.delete("/admin/api/products/:id", requireAdminApi, (req, res) => {
+  const product = setProductHidden(req.params.id, true);
+  if (!product) return res.status(404).json({ message: "상품을 찾을 수 없습니다." });
+  res.json(product);
+});
+
+app.post("/admin/api/products/:id/restore", requireAdminApi, (req, res) => {
+  const product = setProductHidden(req.params.id, false);
+  if (!product) return res.status(404).json({ message: "상품을 찾을 수 없습니다." });
+  res.json(product);
+});
+
+// 진짜 삭제 (되돌릴 수 없음) — 이미지 파일까지 함께 지웁니다.
+app.delete("/admin/api/products/:id/permanent", requireAdminApi, async (req, res) => {
   const removed = deleteProductRow(req.params.id);
   if (!removed) return res.status(404).json({ message: "상품을 찾을 수 없습니다." });
   await deleteStoredImage(removed.img);
@@ -582,7 +612,7 @@ app.post("/api/orders", (req, res) => {
   for (const item of items) {
     const product = findProduct(item.id);
     const qty = Number(item.qty);
-    if (!product || !Number.isInteger(qty) || qty <= 0) {
+    if (!product || product.hidden || !Number.isInteger(qty) || qty <= 0) {
       return res.status(400).json({ message: "유효하지 않은 상품이 포함되어 있습니다." });
     }
 

@@ -74,6 +74,17 @@ function renderTable() {
       const displayLine =
         displayName !== p.name ? `<div class="product-name-sub">노출: ${escapeHtml(displayName)}</div>` : "";
       const optionLine = p.options && p.options.length ? `<div class="product-name-sub">옵션 ${p.options.length}개</div>` : "";
+      const statusBadge = p.hidden
+        ? `<span class="badge-chip badge-hidden">판매중지</span>`
+        : `<span class="badge-chip badge-active">판매중</span>`;
+      const actions = p.hidden
+        ? `
+          <button class="btn btn-ghost btn-small" data-action="edit">수정</button>
+          <button class="btn btn-ghost btn-small" data-action="restore">다시 판매</button>
+          <button class="btn btn-danger btn-small" data-action="delete-permanent">영구 삭제</button>`
+        : `
+          <button class="btn btn-ghost btn-small" data-action="edit">수정</button>
+          <button class="btn btn-danger btn-small" data-action="delete">판매중지</button>`;
       return `
         <tr data-id="${p.id}">
           <td><div class="table-thumb">${thumb}</div></td>
@@ -87,11 +98,9 @@ function renderTable() {
           <td>${formatWon(p.price)}${p.originalPrice ? `<br><span class="product-name-sub" style="text-decoration:line-through">${formatWon(p.originalPrice)}</span>` : ""}</td>
           <td>${p.badge ? `<span class="badge-chip">${p.badge}</span>` : "-"}</td>
           <td>⭐ ${p.rating ?? "-"} (${p.reviews ?? 0})</td>
+          <td>${statusBadge}</td>
           <td>
-            <div class="row-actions">
-              <button class="btn btn-ghost btn-small" data-action="edit">수정</button>
-              <button class="btn btn-danger btn-small" data-action="delete">삭제</button>
-            </div>
+            <div class="row-actions">${actions}</div>
           </td>
         </tr>`;
     })
@@ -293,12 +302,34 @@ tableBody.addEventListener("click", async (e) => {
   if (btn.dataset.action === "edit") {
     startEdit(product);
   } else if (btn.dataset.action === "delete") {
-    if (!confirm(`"${product.name}" 상품을 삭제할까요? 이 작업은 되돌릴 수 없습니다.`)) return;
+    if (!confirm(`"${product.name}" 상품을 판매중지할까요? 사이트에서만 숨겨지고, 관리자 목록에서 언제든 다시 판매할 수 있습니다.`)) return;
     try {
       const res = await api(`/admin/api/products/${id}`, { method: "DELETE" });
       const data = await res.json();
+      if (!res.ok) return showToast(data.message || "처리에 실패했습니다.");
+      showToast("상품을 판매중지했습니다.");
+      if (editingId === id) resetForm();
+      await loadProducts();
+    } catch (err) {
+      // unauthorized already redirects
+    }
+  } else if (btn.dataset.action === "restore") {
+    try {
+      const res = await api(`/admin/api/products/${id}/restore`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) return showToast(data.message || "처리에 실패했습니다.");
+      showToast("다시 판매를 시작했습니다.");
+      await loadProducts();
+    } catch (err) {
+      // unauthorized already redirects
+    }
+  } else if (btn.dataset.action === "delete-permanent") {
+    if (!confirm(`"${product.name}" 상품을 영구 삭제할까요?\n이미지까지 완전히 삭제되며 되돌릴 수 없습니다.`)) return;
+    try {
+      const res = await api(`/admin/api/products/${id}/permanent`, { method: "DELETE" });
+      const data = await res.json();
       if (!res.ok) return showToast(data.message || "삭제에 실패했습니다.");
-      showToast("상품을 삭제했습니다.");
+      showToast("상품을 영구 삭제했습니다.");
       if (editingId === id) resetForm();
       await loadProducts();
     } catch (err) {
