@@ -60,16 +60,59 @@ db.exec(`
     rating REAL,
     reviews INTEGER,
     badge TEXT,
-    description TEXT NOT NULL
+    description TEXT NOT NULL,
+    options TEXT NOT NULL DEFAULT '[]',
+    detailImages TEXT NOT NULL DEFAULT '[]'
   )
 `);
 
-// 기존 DB(displayName 컬럼이 생기기 전에 만들어진)를 위한 마이그레이션.
-const hasDisplayName = db.prepare("PRAGMA table_info(products)").all().some((col) => col.name === "displayName");
-if (!hasDisplayName) {
-  db.exec("ALTER TABLE products ADD COLUMN displayName TEXT NOT NULL DEFAULT ''");
+// 기존 DB에 없던 컬럼을 뒤늦게 추가할 때를 위한 간단한 마이그레이션.
+const existingColumns = new Set(db.prepare("PRAGMA table_info(products)").all().map((col) => col.name));
+function addColumnIfMissing(name, ddl) {
+  if (existingColumns.has(name)) return;
+  db.exec(`ALTER TABLE products ADD COLUMN ${ddl}`);
+  console.log(`[마이그레이션] products 테이블에 ${name} 컬럼을 추가했습니다.`);
+}
+addColumnIfMissing("displayName", "displayName TEXT NOT NULL DEFAULT ''");
+if (!existingColumns.has("displayName")) {
   db.prepare("UPDATE products SET displayName = name WHERE displayName = ''").run();
-  console.log("[마이그레이션] products 테이블에 displayName 컬럼을 추가했습니다.");
+}
+addColumnIfMissing("options", "options TEXT NOT NULL DEFAULT '[]'");
+addColumnIfMissing("detailImages", "detailImages TEXT NOT NULL DEFAULT '[]'");
+
+// ---------- 사이트 공통 설정 (배송/교환/반품 안내) ----------
+db.exec(`
+  CREATE TABLE IF NOT EXISTS settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    shippingInfo TEXT NOT NULL DEFAULT '',
+    returnExchangeInfo TEXT NOT NULL DEFAULT ''
+  )
+`);
+const DEFAULT_SHIPPING_INFO = `■ 배송 안내
+- 배송 방법: 택배 발송
+- 배송 지역: 전국 (제주/도서산간 지역은 추가 비용 및 배송 기간이 발생할 수 있습니다)
+- 배송비: 무료배송 (일부 상품은 상품 상세 참고)
+- 배송 기간: 결제 완료 후 영업일 기준 2~3일 이내 발송 (주문량에 따라 지연될 수 있습니다)`;
+const DEFAULT_RETURN_EXCHANGE_INFO = `■ 교환/반품 안내
+- 신청 기한: 상품 수령일로부터 7일 이내 (전자상거래 등에서의 소비자보호에 관한 법률에 따름)
+- 비용 부담: 단순 변심은 왕복 배송비 고객 부담 / 상품 하자·오배송은 판매자 부담
+- 교환/반품 불가: 상품을 사용·훼손했거나 포장을 개봉해 상품 가치가 훼손된 경우, 고객 책임 사유로 상품이 멸실·훼손된 경우, 시간 경과로 재판매가 곤란할 정도로 가치가 감소한 경우
+- 환불 안내: 반품 상품 검수 완료 후 영업일 기준 3~5일 이내 결제 수단으로 환불`;
+if (!db.prepare("SELECT id FROM settings WHERE id = 1").get()) {
+  db.prepare("INSERT INTO settings (id, shippingInfo, returnExchangeInfo) VALUES (1, ?, ?)").run(
+    DEFAULT_SHIPPING_INFO,
+    DEFAULT_RETURN_EXCHANGE_INFO
+  );
+}
+function getSettings() {
+  return db.prepare("SELECT shippingInfo, returnExchangeInfo FROM settings WHERE id = 1").get();
+}
+function updateSettings({ shippingInfo, returnExchangeInfo }) {
+  db.prepare("UPDATE settings SET shippingInfo = ?, returnExchangeInfo = ? WHERE id = 1").run(
+    shippingInfo,
+    returnExchangeInfo
+  );
+  return getSettings();
 }
 
 // 최초 실행이라 DB가 비어있으면(products 테이블 row 0개) public/products.json을
@@ -77,8 +120,8 @@ if (!hasDisplayName) {
 if (db.prepare("SELECT COUNT(*) AS n FROM products").get().n === 0) {
   const seed = JSON.parse(fs.readFileSync(path.join(PUBLIC_DIR, "products.json"), "utf-8"));
   const insertSeed = db.prepare(`
-    INSERT INTO products (id, name, displayName, cat, catLabel, img, icon, price, originalPrice, rating, reviews, badge, description)
-    VALUES (@id, @name, @displayName, @cat, @catLabel, @img, @icon, @price, @originalPrice, @rating, @reviews, @badge, @description)
+    INSERT INTO products (id, name, displayName, cat, catLabel, img, icon, price, originalPrice, rating, reviews, badge, description, options, detailImages)
+    VALUES (@id, @name, @displayName, @cat, @catLabel, @img, @icon, @price, @originalPrice, @rating, @reviews, @badge, @description, @options, @detailImages)
   `);
   const seedAll = db.transaction((rows) => {
     for (const r of rows) {
@@ -92,6 +135,8 @@ if (db.prepare("SELECT COUNT(*) AS n FROM products").get().n === 0) {
         ...r,
         displayName: r.name,
         description: r.desc,
+        options: "[]",
+        detailImages: "[]",
       });
     }
   });
@@ -101,10 +146,20 @@ if (db.prepare("SELECT COUNT(*) AS n FROM products").get().n === 0) {
 
 function rowToProduct(row) {
   if (!row) return row;
-  const { description, img, icon, ...rest } = row;
+  const { description, img, icon, options, detailImages, ...rest } = row;
   const product = { ...rest, desc: description };
   if (img) product.img = img;
   if (icon) product.icon = icon;
+  try {
+    product.options = JSON.parse(options || "[]");
+  } catch {
+    product.options = [];
+  }
+  try {
+    product.detailImages = JSON.parse(detailImages || "[]");
+  } catch {
+    product.detailImages = [];
+  }
   return product;
 }
 
@@ -117,18 +172,25 @@ function findProduct(id) {
 function insertProduct(data) {
   const info = db
     .prepare(
-      `INSERT INTO products (name, displayName, cat, catLabel, img, icon, price, originalPrice, rating, reviews, badge, description)
-       VALUES (@name, @displayName, @cat, @catLabel, @img, @icon, @price, @originalPrice, @rating, @reviews, @badge, @description)`
+      `INSERT INTO products (name, displayName, cat, catLabel, img, icon, price, originalPrice, rating, reviews, badge, description, options, detailImages)
+       VALUES (@name, @displayName, @cat, @catLabel, @img, @icon, @price, @originalPrice, @rating, @reviews, @badge, @description, @options, @detailImages)`
     )
-    .run(data);
+    .run({ options: "[]", detailImages: "[]", ...data, options: JSON.stringify(data.options || []) });
   return findProduct(info.lastInsertRowid);
 }
 function updateProductRow(id, data) {
+  const existing = findProduct(id);
+  const options = JSON.stringify(data.options !== undefined ? data.options : existing.options);
   db.prepare(
     `UPDATE products SET name=@name, displayName=@displayName, cat=@cat, catLabel=@catLabel, img=@img, icon=@icon,
-       price=@price, originalPrice=@originalPrice, rating=@rating, reviews=@reviews, badge=@badge, description=@description
+       price=@price, originalPrice=@originalPrice, rating=@rating, reviews=@reviews, badge=@badge, description=@description,
+       options=@options
      WHERE id=@id`
-  ).run({ id: Number(id), ...data });
+  ).run({ id: Number(id), ...data, options });
+  return findProduct(id);
+}
+function updateProductDetailImages(id, detailImages) {
+  db.prepare("UPDATE products SET detailImages = ? WHERE id = ?").run(JSON.stringify(detailImages), Number(id));
   return findProduct(id);
 }
 function deleteProductRow(id) {
@@ -299,6 +361,21 @@ async function deleteStoredImage(imgRef) {
   }
 }
 
+// 상품 옵션(옵션명 + 추가금액) JSON 문자열을 검증합니다. 폼에서 [{ "name": "블랙", "priceDelta": 0 }, ...] 형태로 보냅니다.
+function parseOptions(raw) {
+  if (!raw) return [];
+  let arr;
+  try {
+    arr = JSON.parse(raw);
+  } catch {
+    throw new Error("옵션 형식이 올바르지 않습니다.");
+  }
+  if (!Array.isArray(arr)) throw new Error("옵션 형식이 올바르지 않습니다.");
+  return arr
+    .map((o) => ({ name: String((o && o.name) || "").trim(), priceDelta: Number(o && o.priceDelta) || 0 }))
+    .filter((o) => o.name);
+}
+
 // ---------- 관리자 상품 API ----------
 app.get("/admin/api/products", requireAdminApi, (req, res) => {
   res.json(getAllProducts());
@@ -318,6 +395,14 @@ app.post("/admin/api/products", requireAdminApi, upload.single("image"), async (
     return res.status(400).json({ message: "이름·카테고리·설명·가격을 확인하고, 이미지를 업로드하거나 아이콘을 입력해주세요." });
   }
 
+  let options;
+  try {
+    options = parseOptions(body.options);
+  } catch (err) {
+    cleanupUploadedFile(req);
+    return res.status(400).json({ message: err.message });
+  }
+
   try {
     const originalPrice = body.originalPrice ? Number(body.originalPrice) : null;
     const img = await saveUploadedImage(req.file);
@@ -335,6 +420,7 @@ app.post("/admin/api/products", requireAdminApi, upload.single("image"), async (
       description: desc,
       img,
       icon: img ? null : icon,
+      options,
     });
 
     res.status(201).json(product);
@@ -364,6 +450,16 @@ app.put("/admin/api/products/:id", requireAdminApi, upload.single("image"), asyn
     return res.status(400).json({ message: "이름·카테고리·설명·가격을 확인해주세요." });
   }
 
+  let options = existing.options;
+  if (body.options !== undefined) {
+    try {
+      options = parseOptions(body.options);
+    } catch (err) {
+      cleanupUploadedFile(req);
+      return res.status(400).json({ message: err.message });
+    }
+  }
+
   try {
     const originalPrice = body.originalPrice ? Number(body.originalPrice) : null;
 
@@ -390,6 +486,7 @@ app.put("/admin/api/products/:id", requireAdminApi, upload.single("image"), asyn
       description: desc,
       img,
       icon: finalIcon,
+      options,
     });
 
     res.json(product);
@@ -403,7 +500,63 @@ app.delete("/admin/api/products/:id", requireAdminApi, async (req, res) => {
   const removed = deleteProductRow(req.params.id);
   if (!removed) return res.status(404).json({ message: "상품을 찾을 수 없습니다." });
   await deleteStoredImage(removed.img);
+  await Promise.all((removed.detailImages || []).map((ref) => deleteStoredImage(ref)));
   res.json({ ok: true });
+});
+
+// 상세설명 이미지(순서대로 나열되는 상세페이지 이미지) 추가/삭제
+app.post("/admin/api/products/:id/detail-images", requireAdminApi, upload.array("images", 10), async (req, res) => {
+  const existing = findProduct(req.params.id);
+  const files = req.files || [];
+  if (!existing) {
+    await Promise.all(files.map((f) => (f.path ? fs.promises.unlink(f.path).catch(() => {}) : null)));
+    return res.status(404).json({ message: "상품을 찾을 수 없습니다." });
+  }
+  if (files.length === 0) {
+    return res.status(400).json({ message: "업로드할 이미지를 선택해주세요." });
+  }
+
+  try {
+    const newRefs = [];
+    for (const file of files) {
+      newRefs.push(await saveUploadedImage(file));
+    }
+    const product = updateProductDetailImages(existing.id, [...(existing.detailImages || []), ...newRefs]);
+    res.status(201).json(product);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "이미지 업로드 중 오류가 발생했습니다." });
+  }
+});
+
+app.delete("/admin/api/products/:id/detail-images", requireAdminApi, async (req, res) => {
+  const existing = findProduct(req.params.id);
+  if (!existing) return res.status(404).json({ message: "상품을 찾을 수 없습니다." });
+
+  const target = req.body && req.body.image;
+  if (!target || !(existing.detailImages || []).includes(target)) {
+    return res.status(400).json({ message: "삭제할 이미지를 찾을 수 없습니다." });
+  }
+
+  await deleteStoredImage(target);
+  const product = updateProductDetailImages(
+    existing.id,
+    existing.detailImages.filter((ref) => ref !== target)
+  );
+  res.json(product);
+});
+
+// ---------- 사이트 공통 설정 (배송/교환/반품 안내) ----------
+app.get("/admin/api/settings", requireAdminApi, (req, res) => {
+  res.json(getSettings());
+});
+app.put("/admin/api/settings", requireAdminApi, (req, res) => {
+  const shippingInfo = String((req.body && req.body.shippingInfo) || "");
+  const returnExchangeInfo = String((req.body && req.body.returnExchangeInfo) || "");
+  res.json(updateSettings({ shippingInfo, returnExchangeInfo }));
+});
+app.get("/api/settings", (req, res) => {
+  res.json(getSettings());
 });
 
 app.use("/uploads", express.static(UPLOADS_DIR));
@@ -432,8 +585,22 @@ app.post("/api/orders", (req, res) => {
     if (!product || !Number.isInteger(qty) || qty <= 0) {
       return res.status(400).json({ message: "유효하지 않은 상품이 포함되어 있습니다." });
     }
-    amount += product.price * qty;
-    names.push(product.displayName || product.name);
+
+    // 옵션 가격은 서버에 저장된 상품 옵션 목록 기준으로만 계산합니다 (클라이언트가 보낸 금액은 신뢰하지 않음).
+    let optionLabel = "";
+    let priceDelta = 0;
+    if (item.optionIndex !== undefined && item.optionIndex !== null && item.optionIndex !== "") {
+      const option = (product.options || [])[Number(item.optionIndex)];
+      if (!option) {
+        return res.status(400).json({ message: "유효하지 않은 옵션이 포함되어 있습니다." });
+      }
+      optionLabel = option.name;
+      priceDelta = option.priceDelta;
+    }
+
+    amount += (product.price + priceDelta) * qty;
+    const displayName = product.displayName || product.name;
+    names.push(optionLabel ? `${displayName} (${optionLabel})` : displayName);
   }
 
   const orderId = "order_" + crypto.randomBytes(16).toString("base64url");

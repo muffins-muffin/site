@@ -99,11 +99,27 @@
 
         <img id="imgPreview" class="img-preview" hidden alt="현재 이미지">
 
+        <div class="field">
+          <label>상품 옵션 <span class="hint-inline">(색상/사이즈 등, 선택)</span></label>
+          <div id="optionRows" class="option-rows"></div>
+          <button type="button" id="addOptionBtn" class="btn btn-ghost btn-small">+ 옵션 추가</button>
+          <p class="hint">옵션명과 기본가 대비 추가금액을 입력하세요. 추가금액이 없으면 0으로 두세요.</p>
+        </div>
+
         <div class="form-actions">
           <button type="submit" class="btn btn-primary" id="submitBtn">상품 등록</button>
         </div>
         <p class="form-error" id="formError"></p>
       </form>
+
+      <div id="detailImagesSection" class="detail-images-section" hidden>
+        <hr class="panel-divider">
+        <label>상세설명 이미지 <span class="hint-inline">(순서대로 상품 상세페이지에 쭉 나열됩니다)</span></label>
+        <div id="detailImageGrid" class="detail-image-grid"></div>
+        <input type="file" id="detailImageInput" accept="image/*" multiple>
+        <button type="button" id="uploadDetailImagesBtn" class="btn btn-ghost btn-small">이미지 업로드</button>
+        <p class="form-error" id="detailImageError"></p>
+      </div>
     </section>
 
     <section class="panel">
@@ -127,6 +143,27 @@
         </table>
         <p class="empty-msg" id="emptyMsg" hidden>등록된 상품이 없습니다.</p>
       </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>배송/교환/반품 안내</h2>
+      </div>
+      <p class="hint">모든 상품 상세페이지 하단에 공통으로 표시되는 안내문입니다.</p>
+      <form id="settingsForm" class="product-form">
+        <div class="field">
+          <label for="s-shipping">배송 안내</label>
+          <textarea id="s-shipping" name="shippingInfo" rows="6"></textarea>
+        </div>
+        <div class="field">
+          <label for="s-return">교환/반품 안내</label>
+          <textarea id="s-return" name="returnExchangeInfo" rows="8"></textarea>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary" id="settingsSubmitBtn">안내문 저장</button>
+        </div>
+        <p class="form-error" id="settingsError"></p>
+      </form>
     </section>
   </main>
 

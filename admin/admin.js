@@ -10,10 +10,24 @@ const emptyMsg = document.getElementById("emptyMsg");
 const toastEl = document.getElementById("toast");
 const logoutBtn = document.getElementById("logoutBtn");
 
+const optionRows = document.getElementById("optionRows");
+const addOptionBtn = document.getElementById("addOptionBtn");
+
+const detailImagesSection = document.getElementById("detailImagesSection");
+const detailImageGrid = document.getElementById("detailImageGrid");
+const detailImageInput = document.getElementById("detailImageInput");
+const uploadDetailImagesBtn = document.getElementById("uploadDetailImagesBtn");
+const detailImageError = document.getElementById("detailImageError");
+
+const settingsForm = document.getElementById("settingsForm");
+const settingsSubmitBtn = document.getElementById("settingsSubmitBtn");
+const settingsError = document.getElementById("settingsError");
+
 const CATEGORY_LABELS = { remotecam: "원격카메라", electronics: "전자기기", home: "스마트홈" };
 
 let products = [];
 let editingId = null; // null = create mode
+let currentDetailImages = [];
 
 function showToast(msg) {
   toastEl.textContent = msg;
@@ -59,12 +73,14 @@ function renderTable() {
       const displayName = p.displayName || p.name;
       const displayLine =
         displayName !== p.name ? `<div class="product-name-sub">노출: ${escapeHtml(displayName)}</div>` : "";
+      const optionLine = p.options && p.options.length ? `<div class="product-name-sub">옵션 ${p.options.length}개</div>` : "";
       return `
         <tr data-id="${p.id}">
           <td><div class="table-thumb">${thumb}</div></td>
           <td>
             <div class="product-name">${escapeHtml(p.name)}</div>
             ${displayLine}
+            ${optionLine}
             <div class="product-name-sub">#${p.id}</div>
           </td>
           <td>${CATEGORY_LABELS[p.cat] || p.cat}</td>
@@ -86,6 +102,104 @@ function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+// ---------- 상품 옵션 (옵션명 + 추가금액) ----------
+function addOptionRow(name = "", priceDelta = 0) {
+  const row = document.createElement("div");
+  row.className = "option-row";
+  row.innerHTML = `
+    <input type="text" class="opt-name" placeholder="예: 화이트" maxlength="40" value="${escapeHtml(name)}">
+    <input type="number" class="opt-price" placeholder="추가금액(원)" step="100" value="${priceDelta || 0}">
+    <button type="button" class="btn btn-ghost btn-small" data-remove-option>삭제</button>
+  `;
+  optionRows.appendChild(row);
+}
+function renderOptionRows(options) {
+  optionRows.innerHTML = "";
+  (options || []).forEach((o) => addOptionRow(o.name, o.priceDelta));
+}
+function collectOptions() {
+  return Array.from(optionRows.querySelectorAll(".option-row"))
+    .map((row) => ({
+      name: row.querySelector(".opt-name").value.trim(),
+      priceDelta: Number(row.querySelector(".opt-price").value) || 0,
+    }))
+    .filter((o) => o.name);
+}
+addOptionBtn.addEventListener("click", () => addOptionRow());
+optionRows.addEventListener("click", (e) => {
+  if (e.target.closest("[data-remove-option]")) {
+    e.target.closest(".option-row").remove();
+  }
+});
+
+// ---------- 상세설명 이미지 ----------
+function renderDetailImages(images) {
+  currentDetailImages = images || [];
+  detailImageGrid.innerHTML = currentDetailImages
+    .map(
+      (ref) => `
+      <div class="detail-image-item" data-ref="${escapeHtml(ref)}">
+        <img src="${imgSrc(ref)}" alt="상세 이미지">
+        <button type="button" data-remove-detail-image aria-label="삭제">✕</button>
+      </div>`
+    )
+    .join("");
+}
+
+uploadDetailImagesBtn.addEventListener("click", async () => {
+  if (!editingId) return;
+  detailImageError.textContent = "";
+  const files = detailImageInput.files;
+  if (!files || files.length === 0) {
+    detailImageError.textContent = "업로드할 이미지를 선택해주세요.";
+    return;
+  }
+  const fd = new FormData();
+  for (const file of files) fd.append("images", file);
+
+  uploadDetailImagesBtn.disabled = true;
+  uploadDetailImagesBtn.textContent = "업로드 중...";
+  try {
+    const res = await api(`/admin/api/products/${editingId}/detail-images`, { method: "POST", body: fd });
+    const data = await res.json();
+    if (!res.ok) {
+      detailImageError.textContent = data.message || "업로드에 실패했습니다.";
+      return;
+    }
+    renderDetailImages(data.detailImages);
+    detailImageInput.value = "";
+    const idx = products.findIndex((p) => p.id === editingId);
+    if (idx !== -1) products[idx] = data;
+    showToast("상세 이미지를 추가했습니다.");
+  } catch (err) {
+    if (err.message !== "unauthorized") detailImageError.textContent = "서버에 연결할 수 없습니다.";
+  } finally {
+    uploadDetailImagesBtn.disabled = false;
+    uploadDetailImagesBtn.textContent = "이미지 업로드";
+  }
+});
+
+detailImageGrid.addEventListener("click", async (e) => {
+  const btn = e.target.closest("[data-remove-detail-image]");
+  if (!btn || !editingId) return;
+  const ref = btn.closest(".detail-image-item").dataset.ref;
+  try {
+    const res = await api(`/admin/api/products/${editingId}/detail-images`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image: ref }),
+    });
+    const data = await res.json();
+    if (!res.ok) return showToast(data.message || "삭제에 실패했습니다.");
+    renderDetailImages(data.detailImages);
+    const idx = products.findIndex((p) => p.id === editingId);
+    if (idx !== -1) products[idx] = data;
+  } catch (err) {
+    // unauthorized already redirects
+  }
+});
+
+// ---------- 상품 등록/수정 폼 ----------
 function resetForm() {
   editingId = null;
   form.reset();
@@ -95,6 +209,9 @@ function resetForm() {
   formError.textContent = "";
   imgPreview.hidden = true;
   imgPreview.src = "";
+  renderOptionRows([]);
+  detailImagesSection.hidden = true;
+  renderDetailImages([]);
 }
 
 function startEdit(product) {
@@ -123,6 +240,10 @@ function startEdit(product) {
     imgPreview.hidden = true;
   }
 
+  renderOptionRows(product.options || []);
+  detailImagesSection.hidden = false;
+  renderDetailImages(product.detailImages || []);
+
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -134,6 +255,7 @@ form.addEventListener("submit", async (e) => {
   submitBtn.disabled = true;
 
   const formData = new FormData(form);
+  formData.set("options", JSON.stringify(collectOptions()));
   const url = editingId ? `/admin/api/products/${editingId}` : "/admin/api/products";
   const method = editingId ? "PUT" : "POST";
 
@@ -144,9 +266,15 @@ form.addEventListener("submit", async (e) => {
       formError.textContent = data.message || "처리 중 오류가 발생했습니다.";
       return;
     }
-    showToast(editingId ? "상품을 수정했습니다." : "상품을 등록했습니다.");
-    resetForm();
+    const wasEditing = !!editingId;
+    showToast(wasEditing ? "상품을 수정했습니다." : "상품을 등록했습니다.");
     await loadProducts();
+    if (!wasEditing) {
+      // 방금 등록한 상품을 바로 수정 모드로 열어서 상세 이미지를 이어서 추가할 수 있게 합니다.
+      startEdit(data);
+    } else {
+      resetForm();
+    }
   } catch (err) {
     if (err.message !== "unauthorized") formError.textContent = "서버에 연결할 수 없습니다.";
   } finally {
@@ -179,9 +307,48 @@ tableBody.addEventListener("click", async (e) => {
   }
 });
 
+// ---------- 배송/교환/반품 안내 ----------
+async function loadSettings() {
+  try {
+    const res = await api("/admin/api/settings");
+    const data = await res.json();
+    settingsForm.shippingInfo.value = data.shippingInfo || "";
+    settingsForm.returnExchangeInfo.value = data.returnExchangeInfo || "";
+  } catch (err) {
+    // unauthorized already redirects
+  }
+}
+
+settingsForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  settingsError.textContent = "";
+  settingsSubmitBtn.disabled = true;
+  try {
+    const res = await api("/admin/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        shippingInfo: settingsForm.shippingInfo.value,
+        returnExchangeInfo: settingsForm.returnExchangeInfo.value,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      settingsError.textContent = data.message || "저장에 실패했습니다.";
+      return;
+    }
+    showToast("배송/교환/반품 안내를 저장했습니다.");
+  } catch (err) {
+    if (err.message !== "unauthorized") settingsError.textContent = "서버에 연결할 수 없습니다.";
+  } finally {
+    settingsSubmitBtn.disabled = false;
+  }
+});
+
 logoutBtn.addEventListener("click", async () => {
   await fetch("/admin/api/logout", { method: "POST" });
   window.location.href = "/admin/login.html";
 });
 
 loadProducts();
+loadSettings();

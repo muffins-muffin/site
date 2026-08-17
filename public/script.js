@@ -7,8 +7,12 @@ const ICON_CLOSE =
 // ---------- Product data ----------
 // Loaded from /api/products at startup (server-side DB, same data used for order/price validation).
 let PRODUCTS = [];
+// 배송/교환/반품 공통 안내 (관리자에서 설정). /api/settings에서 불러옵니다.
+let SETTINGS = null;
 
 // ---------- State ----------
+// 장바구니는 { [cartKey]: { id, qty, optionIndex } } 형태입니다.
+// cartKey는 옵션이 없으면 "id", 있으면 "id::optionIndex" 입니다.
 let state = {
   category: "all",
   query: "",
@@ -16,6 +20,24 @@ let state = {
   cart: JSON.parse(localStorage.getItem("synap365_cart") || "{}"),
   wishlist: new Set(JSON.parse(localStorage.getItem("synap365_wishlist") || "[]")),
 };
+
+// 예전 버전(장바구니 값이 그냥 숫자 수량이었던 시절)과의 호환을 위해 새 형태로 변환합니다.
+function normalizeCart() {
+  const normalized = {};
+  for (const [key, val] of Object.entries(state.cart)) {
+    if (typeof val === "number") {
+      normalized[key] = { id: Number(key), qty: val, optionIndex: null };
+    } else if (val && typeof val === "object" && Number.isFinite(val.qty)) {
+      normalized[key] = val;
+    }
+  }
+  state.cart = normalized;
+}
+normalizeCart();
+
+function cartKey(id, optionIndex) {
+  return optionIndex === null || optionIndex === undefined ? `${id}` : `${id}::${optionIndex}`;
+}
 
 const formatWon = (n) => n.toLocaleString("ko-KR") + "원";
 
@@ -125,56 +147,70 @@ function saveWishlist() {
   localStorage.setItem("synap365_wishlist", JSON.stringify([...state.wishlist]));
 }
 
-function addToCart(id, qty = 1) {
-  state.cart[id] = (state.cart[id] || 0) + qty;
+function addToCart(id, qty = 1, optionIndex = null) {
+  const key = cartKey(id, optionIndex);
+  if (state.cart[key]) {
+    state.cart[key].qty += qty;
+  } else {
+    state.cart[key] = { id, qty, optionIndex };
+  }
   saveCart();
   renderCart();
   showToast("장바구니에 담았어요 🛒");
 }
 
-function updateQty(id, delta) {
-  if (!state.cart[id]) return;
-  state.cart[id] += delta;
-  if (state.cart[id] <= 0) delete state.cart[id];
+function updateQty(key, delta) {
+  const item = state.cart[key];
+  if (!item) return;
+  item.qty += delta;
+  if (item.qty <= 0) delete state.cart[key];
   saveCart();
   renderCart();
 }
 
-function removeFromCart(id) {
-  delete state.cart[id];
+function removeFromCart(key) {
+  delete state.cart[key];
   saveCart();
   renderCart();
+}
+
+// 옵션이 선택된 경우 기본가에 옵션 추가금액을 더한 실제 판매가를 반환합니다.
+function getUnitPrice(product, item) {
+  const option = item.optionIndex != null ? (product.options || [])[item.optionIndex] : null;
+  return product.price + (option ? option.priceDelta : 0);
 }
 
 function renderCart() {
-  const ids = Object.keys(state.cart);
-  const totalCount = ids.reduce((sum, id) => sum + state.cart[id], 0);
+  const keys = Object.keys(state.cart);
+  const totalCount = keys.reduce((sum, key) => sum + state.cart[key].qty, 0);
   cartCount.textContent = totalCount;
 
-  if (ids.length === 0) {
+  if (keys.length === 0) {
     cartItemsEl.innerHTML = `<p class="cart-empty">장바구니가 비어있어요.<br>마음에 드는 상품을 담아보세요!</p>`;
     cartTotalEl.textContent = formatWon(0);
     return;
   }
 
   let total = 0;
-  cartItemsEl.innerHTML = ids
-    .map((id) => {
-      const p = PRODUCTS.find((x) => x.id === Number(id));
+  cartItemsEl.innerHTML = keys
+    .map((key) => {
+      const item = state.cart[key];
+      const p = PRODUCTS.find((x) => x.id === item.id);
       if (!p) return "";
-      const qty = state.cart[id];
-      total += p.price * qty;
+      const option = item.optionIndex != null ? (p.options || [])[item.optionIndex] : null;
+      const unitPrice = getUnitPrice(p, item);
+      total += unitPrice * item.qty;
       return `
         <div class="cart-item">
           <div class="cart-item-thumb" style="background:${thumbColor(p.cat)}">${p.img ? `<img class="cart-item-thumb-img" src="${p.img}" alt="${p.displayName || p.name}">` : p.icon}</div>
           <div class="cart-item-info">
-            <p class="cart-item-name">${p.displayName || p.name}</p>
-            <p class="cart-item-price">${formatWon(p.price)}</p>
+            <p class="cart-item-name">${p.displayName || p.name}${option ? ` <span class="cart-item-option">(${option.name})</span>` : ""}</p>
+            <p class="cart-item-price">${formatWon(unitPrice)}</p>
             <div class="cart-item-controls">
-              <button class="qty-btn" data-qty-down="${p.id}">−</button>
-              <span class="qty-value">${qty}</span>
-              <button class="qty-btn" data-qty-up="${p.id}">+</button>
-              <button class="remove-item" data-remove="${p.id}">삭제</button>
+              <button class="qty-btn" data-qty-down="${key}">−</button>
+              <span class="qty-value">${item.qty}</span>
+              <button class="qty-btn" data-qty-up="${key}">+</button>
+              <button class="remove-item" data-remove="${key}">삭제</button>
             </div>
           </div>
         </div>
@@ -197,6 +233,38 @@ function openProductModal(id) {
     ? Math.round((1 - p.price / p.originalPrice) * 100)
     : null;
 
+  const hasOptions = p.options && p.options.length > 0;
+  const optionSelectHtml = hasOptions
+    ? `
+      <div class="modal-option-row">
+        <label for="modalOptionSelect">옵션 선택</label>
+        <select id="modalOptionSelect">
+          ${p.options
+            .map((o, i) => `<option value="${i}">${o.name}${o.priceDelta ? ` (+${formatWon(o.priceDelta)})` : ""}</option>`)
+            .join("")}
+        </select>
+      </div>`
+    : "";
+
+  const detailImagesHtml =
+    p.detailImages && p.detailImages.length
+      ? `<div class="modal-detail-images">${p.detailImages.map((ref) => `<img src="${ref}" alt="상세 이미지" loading="lazy">`).join("")}</div>`
+      : "";
+
+  const policyHtml = SETTINGS
+    ? `
+      <div class="modal-policy">
+        <details>
+          <summary>배송 안내</summary>
+          <pre>${SETTINGS.shippingInfo}</pre>
+        </details>
+        <details>
+          <summary>교환/반품 안내</summary>
+          <pre>${SETTINGS.returnExchangeInfo}</pre>
+        </details>
+      </div>`
+    : "";
+
   productModal.innerHTML = `
     <button class="modal-close" id="modalClose">${ICON_CLOSE}</button>
     <div class="modal-thumb" style="background:${thumbColor(p.cat)}">${p.img ? `<img class="modal-thumb-img" src="${p.img}" alt="${p.displayName || p.name}">` : p.icon}</div>
@@ -209,10 +277,13 @@ function openProductModal(id) {
         ${p.originalPrice ? `<span class="product-price-original">${formatWon(p.originalPrice)}</span><span class="product-discount">${discount}%</span>` : ""}
       </div>
       <p class="modal-desc">${p.desc}</p>
+      ${optionSelectHtml}
       <div class="modal-actions">
-        <button class="btn btn-primary" data-add="${p.id}">장바구니 담기</button>
+        <button class="btn btn-primary" data-modal-add="${p.id}">장바구니 담기</button>
         <button class="btn btn-ghost" data-wish="${p.id}">${ICON_HEART(state.wishlist.has(p.id))}<span>${state.wishlist.has(p.id) ? "위시완료" : "위시추가"}</span></button>
       </div>
+      ${detailImagesHtml}
+      ${policyHtml}
     </div>
   `;
   modalOverlay.classList.add("show");
@@ -235,7 +306,23 @@ function showToast(msg) {
 document.addEventListener("click", (e) => {
   const addBtn = e.target.closest("[data-add]");
   if (addBtn) {
-    addToCart(Number(addBtn.dataset.add));
+    const id = Number(addBtn.dataset.add);
+    const product = PRODUCTS.find((x) => x.id === id);
+    // 옵션이 있는 상품은 카드에서 바로 담지 않고 모달에서 옵션을 고른 뒤 담게 합니다.
+    if (product && product.options && product.options.length > 0) {
+      openProductModal(id);
+    } else {
+      addToCart(id);
+    }
+    return;
+  }
+
+  const modalAddBtn = e.target.closest("[data-modal-add]");
+  if (modalAddBtn) {
+    const id = Number(modalAddBtn.dataset.modalAdd);
+    const select = document.getElementById("modalOptionSelect");
+    const optionIndex = select ? Number(select.value) : null;
+    addToCart(id, 1, optionIndex);
     return;
   }
 
@@ -254,13 +341,13 @@ document.addEventListener("click", (e) => {
   }
 
   const qtyUp = e.target.closest("[data-qty-up]");
-  if (qtyUp) { updateQty(Number(qtyUp.dataset.qtyUp), 1); return; }
+  if (qtyUp) { updateQty(qtyUp.dataset.qtyUp, 1); return; }
 
   const qtyDown = e.target.closest("[data-qty-down]");
-  if (qtyDown) { updateQty(Number(qtyDown.dataset.qtyDown), -1); return; }
+  if (qtyDown) { updateQty(qtyDown.dataset.qtyDown, -1); return; }
 
   const removeBtn = e.target.closest("[data-remove]");
-  if (removeBtn) { removeFromCart(Number(removeBtn.dataset.remove)); return; }
+  if (removeBtn) { removeFromCart(removeBtn.dataset.remove); return; }
 
   const card = e.target.closest(".product-card");
   if (card && !e.target.closest("button")) {
@@ -306,13 +393,16 @@ overlay.addEventListener("click", () => {
 });
 
 checkoutBtn.addEventListener("click", async () => {
-  const ids = Object.keys(state.cart);
-  if (ids.length === 0) {
+  const keys = Object.keys(state.cart);
+  if (keys.length === 0) {
     showToast("장바구니가 비어있어요.");
     return;
   }
 
-  const items = ids.map((id) => ({ id: Number(id), qty: state.cart[id] }));
+  const items = keys.map((key) => {
+    const item = state.cart[key];
+    return { id: item.id, qty: item.qty, optionIndex: item.optionIndex };
+  });
 
   checkoutBtn.disabled = true;
   checkoutBtn.textContent = "주문 생성 중...";
@@ -413,3 +503,10 @@ fetch(`${window.API_BASE || ""}/api/products`)
     emptyMsg.hidden = false;
     emptyMsg.textContent = "상품 정보를 불러오지 못했어요. 서버가 실행 중인지 확인해주세요.";
   });
+
+fetch(`${window.API_BASE || ""}/api/settings`)
+  .then((res) => res.json())
+  .then((data) => {
+    SETTINGS = data;
+  })
+  .catch((err) => console.error("배송/교환/반품 안내를 불러오지 못했습니다.", err));
