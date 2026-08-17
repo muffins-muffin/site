@@ -324,28 +324,16 @@ if (R2_ENABLED) {
 }
 
 const ALLOWED_EXT = [".png", ".jpg", ".jpeg", ".webp", ".gif"];
-const upload = multer({
-  storage: R2_ENABLED
-    ? multer.memoryStorage()
-    : multer.diskStorage({
-        destination: (req, file, cb) => cb(null, UPLOADS_DIR),
-        filename: (req, file, cb) => {
-          const ext = ALLOWED_EXT.includes(path.extname(file.originalname).toLowerCase())
-            ? path.extname(file.originalname).toLowerCase()
-            : ".png";
-          cb(null, `product_${Date.now()}_${crypto.randomBytes(4).toString("hex")}${ext}`);
-        },
-      }),
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    if (/^image\//.test(file.mimetype)) return cb(null, true);
-    cb(new Error("이미지 파일만 업로드할 수 있습니다."));
-  },
-});
 
-// 검증 실패 시, 로컬 디스크에 이미 쓰여진 임시 업로드 파일을 정리합니다 (R2 모드는 메모리에만 있어 필요 없음).
-function cleanupUploadedFile(req) {
-  if (req.file && req.file.path) fs.unlink(req.file.path, () => {});
+// 검증 실패 시, 로컬 디스크에 이미 쓰여진 임시 업로드 파일들을 정리합니다 (R2 모드는 메모리에만 있어 필요 없음).
+// productUpload.fields(...)를 쓰면 req.files는 { image: [...], detailImages: [...], files: [...] } 형태입니다.
+function cleanupUploadedFiles(req) {
+  const grouped = req.files || {};
+  Object.values(grouped)
+    .flat()
+    .forEach((f) => {
+      if (f.path) fs.unlink(f.path, () => {});
+    });
 }
 
 // 업로드된 파일을 최종 저장소에 반영하고, products.img에 저장할 값을 반환합니다.
@@ -393,24 +381,6 @@ const FILES_DIR = path.join(DATA_DIR, "files");
 fs.mkdirSync(FILES_DIR, { recursive: true });
 const ALLOWED_FILE_EXT = [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".hwp", ".zip", ".txt", ".csv", ".png", ".jpg", ".jpeg"];
 
-const uploadFile = multer({
-  storage: R2_ENABLED
-    ? multer.memoryStorage()
-    : multer.diskStorage({
-        destination: (req, file, cb) => cb(null, FILES_DIR),
-        filename: (req, file, cb) => {
-          const ext = path.extname(file.originalname).toLowerCase();
-          cb(null, `file_${Date.now()}_${crypto.randomBytes(4).toString("hex")}${ALLOWED_FILE_EXT.includes(ext) ? ext : ""}`);
-        },
-      }),
-  limits: { fileSize: 20 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (ALLOWED_FILE_EXT.includes(ext)) return cb(null, true);
-    cb(new Error("지원하지 않는 파일 형식입니다. (pdf, doc, xls, ppt, hwp, zip, txt, csv, 이미지)"));
-  },
-});
-
 // multer(busboy)가 한글 등 비-ASCII 파일명을 종종 latin1로 잘못 디코딩해서 넘겨줍니다
 // (모든 글자가 0xFF 이하인 경우에만 해당) — 원래 UTF-8 바이트로 다시 해석해 복구합니다.
 function fixMulterFilename(name) {
@@ -451,6 +421,42 @@ async function saveUploadedFile(file) {
   return `files/${file.filename}`;
 }
 
+// 상품 등록/수정 폼 하나에서 대표 이미지(image) + 상세설명 이미지(detailImages) + 첨부파일(files)을
+// 한 번에 받습니다. 필드별로 저장 위치/허용 형식이 다르므로 file.fieldname으로 분기합니다.
+const productUpload = multer({
+  storage: R2_ENABLED
+    ? multer.memoryStorage()
+    : multer.diskStorage({
+        destination: (req, file, cb) => cb(null, file.fieldname === "files" ? FILES_DIR : UPLOADS_DIR),
+        filename: (req, file, cb) => {
+          if (file.fieldname === "files") {
+            const ext = path.extname(file.originalname).toLowerCase();
+            cb(null, `file_${Date.now()}_${crypto.randomBytes(4).toString("hex")}${ALLOWED_FILE_EXT.includes(ext) ? ext : ""}`);
+          } else {
+            const ext = ALLOWED_EXT.includes(path.extname(file.originalname).toLowerCase())
+              ? path.extname(file.originalname).toLowerCase()
+              : ".png";
+            cb(null, `product_${Date.now()}_${crypto.randomBytes(4).toString("hex")}${ext}`);
+          }
+        },
+      }),
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.fieldname === "files") {
+      const ext = path.extname(file.originalname).toLowerCase();
+      if (ALLOWED_FILE_EXT.includes(ext)) return cb(null, true);
+      return cb(new Error("첨부파일 형식을 확인해주세요. (pdf, doc, xls, ppt, hwp, zip, txt, csv, 이미지)"));
+    }
+    if (/^image\//.test(file.mimetype)) return cb(null, true);
+    cb(new Error("이미지 파일만 업로드할 수 있습니다."));
+  },
+});
+const productUploadFields = productUpload.fields([
+  { name: "image", maxCount: 1 },
+  { name: "detailImages", maxCount: 10 },
+  { name: "files", maxCount: 10 },
+]);
+
 // 상품 옵션(옵션명 + 추가금액) JSON 문자열을 검증합니다. 폼에서 [{ "name": "블랙", "priceDelta": 0 }, ...] 형태로 보냅니다.
 function parseOptions(raw) {
   if (!raw) return [];
@@ -471,7 +477,27 @@ app.get("/admin/api/products", requireAdminApi, (req, res) => {
   res.json(getAllProducts(true)); // 판매중지 상품도 함께 보여줍니다.
 });
 
-app.post("/admin/api/products", requireAdminApi, upload.single("image"), async (req, res) => {
+// 상세설명 이미지·첨부파일로 새로 올라온 파일들을 저장하고, 상품에 이어붙입니다.
+// (등록 시점에도, 수정 시점에도 같은 방식으로 "추가"됩니다 — 기존 항목은 그대로 유지)
+async function appendUploadedExtras(product, files) {
+  const detailImageFiles = (files && files.detailImages) || [];
+  const fileAttachments = (files && files.files) || [];
+
+  let result = product;
+  if (detailImageFiles.length) {
+    const refs = [];
+    for (const f of detailImageFiles) refs.push(await saveUploadedImage(f));
+    result = updateProductDetailImages(result.id, [...(result.detailImages || []), ...refs]);
+  }
+  if (fileAttachments.length) {
+    const newFiles = [];
+    for (const f of fileAttachments) newFiles.push({ name: fixMulterFilename(f.originalname), ref: await saveUploadedFile(f) });
+    result = updateProductFiles(result.id, [...(result.files || []), ...newFiles]);
+  }
+  return result;
+}
+
+app.post("/admin/api/products", requireAdminApi, productUploadFields, async (req, res) => {
   const body = req.body || {};
   const name = (body.name || "").trim();
   const displayName = (body.displayName || "").trim();
@@ -479,9 +505,10 @@ app.post("/admin/api/products", requireAdminApi, upload.single("image"), async (
   const desc = (body.desc || "").trim();
   const price = Number(body.price);
   const icon = (body.icon || "").trim();
+  const imageFile = req.files && req.files.image && req.files.image[0];
 
-  if (!name || !CATEGORY_LABELS[cat] || !desc || !Number.isFinite(price) || price <= 0 || (!req.file && !icon)) {
-    cleanupUploadedFile(req);
+  if (!name || !CATEGORY_LABELS[cat] || !desc || !Number.isFinite(price) || price <= 0 || (!imageFile && !icon)) {
+    cleanupUploadedFiles(req);
     return res.status(400).json({ message: "이름·카테고리·설명·가격을 확인하고, 이미지를 업로드하거나 아이콘을 입력해주세요." });
   }
 
@@ -489,15 +516,15 @@ app.post("/admin/api/products", requireAdminApi, upload.single("image"), async (
   try {
     options = parseOptions(body.options);
   } catch (err) {
-    cleanupUploadedFile(req);
+    cleanupUploadedFiles(req);
     return res.status(400).json({ message: err.message });
   }
 
   try {
     const originalPrice = body.originalPrice ? Number(body.originalPrice) : null;
-    const img = await saveUploadedImage(req.file);
+    const img = await saveUploadedImage(imageFile);
 
-    const product = insertProduct({
+    let product = insertProduct({
       name,
       displayName: displayName || name,
       cat,
@@ -513,6 +540,8 @@ app.post("/admin/api/products", requireAdminApi, upload.single("image"), async (
       options,
     });
 
+    product = await appendUploadedExtras(product, req.files);
+
     res.status(201).json(product);
   } catch (err) {
     console.error(err);
@@ -520,10 +549,10 @@ app.post("/admin/api/products", requireAdminApi, upload.single("image"), async (
   }
 });
 
-app.put("/admin/api/products/:id", requireAdminApi, upload.single("image"), async (req, res) => {
+app.put("/admin/api/products/:id", requireAdminApi, productUploadFields, async (req, res) => {
   const existing = findProduct(req.params.id);
   if (!existing) {
-    cleanupUploadedFile(req);
+    cleanupUploadedFiles(req);
     return res.status(404).json({ message: "상품을 찾을 수 없습니다." });
   }
 
@@ -534,9 +563,10 @@ app.put("/admin/api/products/:id", requireAdminApi, upload.single("image"), asyn
   const desc = (body.desc || "").trim();
   const price = Number(body.price);
   const icon = (body.icon || "").trim();
+  const imageFile = req.files && req.files.image && req.files.image[0];
 
   if (!name || !CATEGORY_LABELS[cat] || !desc || !Number.isFinite(price) || price <= 0) {
-    cleanupUploadedFile(req);
+    cleanupUploadedFiles(req);
     return res.status(400).json({ message: "이름·카테고리·설명·가격을 확인해주세요." });
   }
 
@@ -545,7 +575,7 @@ app.put("/admin/api/products/:id", requireAdminApi, upload.single("image"), asyn
     try {
       options = parseOptions(body.options);
     } catch (err) {
-      cleanupUploadedFile(req);
+      cleanupUploadedFiles(req);
       return res.status(400).json({ message: err.message });
     }
   }
@@ -555,15 +585,15 @@ app.put("/admin/api/products/:id", requireAdminApi, upload.single("image"), asyn
 
     let img = existing.img || null;
     let finalIcon = existing.icon || null;
-    if (req.file) {
+    if (imageFile) {
       await deleteStoredObject(existing.img);
-      img = await saveUploadedImage(req.file);
+      img = await saveUploadedImage(imageFile);
       finalIcon = null;
     } else if (icon && !existing.img) {
       finalIcon = icon;
     }
 
-    const product = updateProductRow(existing.id, {
+    let product = updateProductRow(existing.id, {
       name,
       displayName: displayName || name,
       cat,
@@ -578,6 +608,8 @@ app.put("/admin/api/products/:id", requireAdminApi, upload.single("image"), asyn
       icon: finalIcon,
       options,
     });
+
+    product = await appendUploadedExtras(product, req.files);
 
     res.json(product);
   } catch (err) {
@@ -610,31 +642,8 @@ app.delete("/admin/api/products/:id/permanent", requireAdminApi, async (req, res
   res.json({ ok: true });
 });
 
-// 상세설명 이미지(순서대로 나열되는 상세페이지 이미지) 추가/삭제
-app.post("/admin/api/products/:id/detail-images", requireAdminApi, upload.array("images", 10), async (req, res) => {
-  const existing = findProduct(req.params.id);
-  const files = req.files || [];
-  if (!existing) {
-    await Promise.all(files.map((f) => (f.path ? fs.promises.unlink(f.path).catch(() => {}) : null)));
-    return res.status(404).json({ message: "상품을 찾을 수 없습니다." });
-  }
-  if (files.length === 0) {
-    return res.status(400).json({ message: "업로드할 이미지를 선택해주세요." });
-  }
-
-  try {
-    const newRefs = [];
-    for (const file of files) {
-      newRefs.push(await saveUploadedImage(file));
-    }
-    const product = updateProductDetailImages(existing.id, [...(existing.detailImages || []), ...newRefs]);
-    res.status(201).json(product);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "이미지 업로드 중 오류가 발생했습니다." });
-  }
-});
-
+// 상세설명 이미지(순서대로 나열되는 상세페이지 이미지) 삭제
+// (추가는 상품 등록/수정 폼(POST·PUT /admin/api/products[/:id])에서 detailImages 필드로 함께 처리합니다)
 app.delete("/admin/api/products/:id/detail-images", requireAdminApi, async (req, res) => {
   const existing = findProduct(req.params.id);
   if (!existing) return res.status(404).json({ message: "상품을 찾을 수 없습니다." });
@@ -652,31 +661,8 @@ app.delete("/admin/api/products/:id/detail-images", requireAdminApi, async (req,
   res.json(product);
 });
 
-// 첨부파일(설명서, 스펙시트 등) 추가/삭제
-app.post("/admin/api/products/:id/files", requireAdminApi, uploadFile.array("files", 10), async (req, res) => {
-  const existing = findProduct(req.params.id);
-  const uploaded = req.files || [];
-  if (!existing) {
-    await Promise.all(uploaded.map((f) => (f.path ? fs.promises.unlink(f.path).catch(() => {}) : null)));
-    return res.status(404).json({ message: "상품을 찾을 수 없습니다." });
-  }
-  if (uploaded.length === 0) {
-    return res.status(400).json({ message: "업로드할 파일을 선택해주세요." });
-  }
-
-  try {
-    const newFiles = [];
-    for (const file of uploaded) {
-      newFiles.push({ name: fixMulterFilename(file.originalname), ref: await saveUploadedFile(file) });
-    }
-    const product = updateProductFiles(existing.id, [...(existing.files || []), ...newFiles]);
-    res.status(201).json(product);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "파일 업로드 중 오류가 발생했습니다." });
-  }
-});
-
+// 첨부파일(설명서, 스펙시트 등) 삭제
+// (추가는 상품 등록/수정 폼(POST·PUT /admin/api/products[/:id])에서 files 필드로 함께 처리합니다)
 app.delete("/admin/api/products/:id/files", requireAdminApi, async (req, res) => {
   const existing = findProduct(req.params.id);
   if (!existing) return res.status(404).json({ message: "상품을 찾을 수 없습니다." });

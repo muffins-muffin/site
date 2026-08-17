@@ -13,17 +13,11 @@ const logoutBtn = document.getElementById("logoutBtn");
 const optionRows = document.getElementById("optionRows");
 const addOptionBtn = document.getElementById("addOptionBtn");
 
-const detailImagesSection = document.getElementById("detailImagesSection");
 const detailImageGrid = document.getElementById("detailImageGrid");
 const detailImageInput = document.getElementById("detailImageInput");
-const uploadDetailImagesBtn = document.getElementById("uploadDetailImagesBtn");
-const detailImageError = document.getElementById("detailImageError");
 
-const filesSection = document.getElementById("filesSection");
 const fileList = document.getElementById("fileList");
 const fileInput = document.getElementById("fileInput");
-const uploadFilesBtn = document.getElementById("uploadFilesBtn");
-const fileError = document.getElementById("fileError");
 
 const settingsForm = document.getElementById("settingsForm");
 const settingsSubmitBtn = document.getElementById("settingsSubmitBtn");
@@ -80,6 +74,10 @@ function renderTable() {
       const displayLine =
         displayName !== p.name ? `<div class="product-name-sub">노출: ${escapeHtml(displayName)}</div>` : "";
       const optionLine = p.options && p.options.length ? `<div class="product-name-sub">옵션 ${p.options.length}개</div>` : "";
+      const contentBits = [];
+      if (p.detailImages && p.detailImages.length) contentBits.push(`상세이미지 ${p.detailImages.length}장`);
+      if (p.files && p.files.length) contentBits.push(`첨부파일 ${p.files.length}개`);
+      const contentLine = contentBits.length ? `<div class="product-name-sub">${contentBits.join(" · ")}</div>` : "";
       const statusBadge = p.hidden
         ? `<span class="badge-chip badge-hidden">판매중지</span>`
         : `<span class="badge-chip badge-active">판매중</span>`;
@@ -98,6 +96,7 @@ function renderTable() {
             <div class="product-name">${escapeHtml(p.name)}</div>
             ${displayLine}
             ${optionLine}
+            ${contentLine}
             <div class="product-name-sub">#${p.id}</div>
           </td>
           <td>${CATEGORY_LABELS[p.cat] || p.cat}</td>
@@ -161,39 +160,6 @@ function renderDetailImages(images) {
     .join("");
 }
 
-uploadDetailImagesBtn.addEventListener("click", async () => {
-  if (!editingId) return;
-  detailImageError.textContent = "";
-  const files = detailImageInput.files;
-  if (!files || files.length === 0) {
-    detailImageError.textContent = "업로드할 이미지를 선택해주세요.";
-    return;
-  }
-  const fd = new FormData();
-  for (const file of files) fd.append("images", file);
-
-  uploadDetailImagesBtn.disabled = true;
-  uploadDetailImagesBtn.textContent = "업로드 중...";
-  try {
-    const res = await api(`/admin/api/products/${editingId}/detail-images`, { method: "POST", body: fd });
-    const data = await res.json();
-    if (!res.ok) {
-      detailImageError.textContent = data.message || "업로드에 실패했습니다.";
-      return;
-    }
-    renderDetailImages(data.detailImages);
-    detailImageInput.value = "";
-    const idx = products.findIndex((p) => p.id === editingId);
-    if (idx !== -1) products[idx] = data;
-    showToast("상세 이미지를 추가했습니다.");
-  } catch (err) {
-    if (err.message !== "unauthorized") detailImageError.textContent = "서버에 연결할 수 없습니다.";
-  } finally {
-    uploadDetailImagesBtn.disabled = false;
-    uploadDetailImagesBtn.textContent = "이미지 업로드";
-  }
-});
-
 detailImageGrid.addEventListener("click", async (e) => {
   const btn = e.target.closest("[data-remove-detail-image]");
   if (!btn || !editingId) return;
@@ -227,39 +193,6 @@ function renderFiles(files) {
     .join("");
 }
 
-uploadFilesBtn.addEventListener("click", async () => {
-  if (!editingId) return;
-  fileError.textContent = "";
-  const files = fileInput.files;
-  if (!files || files.length === 0) {
-    fileError.textContent = "업로드할 파일을 선택해주세요.";
-    return;
-  }
-  const fd = new FormData();
-  for (const file of files) fd.append("files", file);
-
-  uploadFilesBtn.disabled = true;
-  uploadFilesBtn.textContent = "업로드 중...";
-  try {
-    const res = await api(`/admin/api/products/${editingId}/files`, { method: "POST", body: fd });
-    const data = await res.json();
-    if (!res.ok) {
-      fileError.textContent = data.message || "업로드에 실패했습니다.";
-      return;
-    }
-    renderFiles(data.files);
-    fileInput.value = "";
-    const idx = products.findIndex((p) => p.id === editingId);
-    if (idx !== -1) products[idx] = data;
-    showToast("첨부파일을 추가했습니다.");
-  } catch (err) {
-    if (err.message !== "unauthorized") fileError.textContent = "서버에 연결할 수 없습니다.";
-  } finally {
-    uploadFilesBtn.disabled = false;
-    uploadFilesBtn.textContent = "파일 업로드";
-  }
-});
-
 fileList.addEventListener("click", async (e) => {
   const btn = e.target.closest("[data-remove-file]");
   if (!btn || !editingId) return;
@@ -291,9 +224,7 @@ function resetForm() {
   imgPreview.hidden = true;
   imgPreview.src = "";
   renderOptionRows([]);
-  detailImagesSection.hidden = true;
   renderDetailImages([]);
-  filesSection.hidden = true;
   renderFiles([]);
 }
 
@@ -324,9 +255,7 @@ function startEdit(product) {
   }
 
   renderOptionRows(product.options || []);
-  detailImagesSection.hidden = false;
   renderDetailImages(product.detailImages || []);
-  filesSection.hidden = false;
   renderFiles(product.files || []);
 
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -351,15 +280,9 @@ form.addEventListener("submit", async (e) => {
       formError.textContent = data.message || "처리 중 오류가 발생했습니다.";
       return;
     }
-    const wasEditing = !!editingId;
-    showToast(wasEditing ? "상품을 수정했습니다." : "상품을 등록했습니다.");
+    showToast(editingId ? "상품을 수정했습니다." : "상품을 등록했습니다.");
     await loadProducts();
-    if (!wasEditing) {
-      // 방금 등록한 상품을 바로 수정 모드로 열어서 상세 이미지를 이어서 추가할 수 있게 합니다.
-      startEdit(data);
-    } else {
-      resetForm();
-    }
+    resetForm();
   } catch (err) {
     if (err.message !== "unauthorized") formError.textContent = "서버에 연결할 수 없습니다.";
   } finally {
