@@ -425,19 +425,24 @@ async function saveUploadedFile(file) {
 // media는 사진과 첨부파일(pdf 등)을 한 입력창에서 같이 받고, 이미지인지 아닌지는
 // mimetype으로 서버가 자동으로 구분합니다 — 관리자가 "이 사진을 어느 칸에 넣어야 하지"
 // 고민할 필요 없이, 이미지는 상세 이미지로, 문서는 첨부파일로 알아서 분류됩니다.
+// mimetype이 "image/"로 시작하는 파일 중엔 psd·tiff·heic처럼 브라우저가 못 그리는
+// 형식도 있어서(예: .psd → image/vnd.adobe.photoshop), 실제 웹에서 열리는 확장자인지도 함께 봅니다.
 function isImageMimetype(mimetype) {
   return /^image\//.test(mimetype);
+}
+function isWebSafeImage(file) {
+  return isImageMimetype(file.mimetype) && ALLOWED_EXT.includes(path.extname(file.originalname).toLowerCase());
 }
 const productUpload = multer({
   storage: R2_ENABLED
     ? multer.memoryStorage()
     : multer.diskStorage({
         destination: (req, file, cb) => {
-          const goesToUploads = file.fieldname === "image" || (file.fieldname === "media" && isImageMimetype(file.mimetype));
+          const goesToUploads = file.fieldname === "image" || (file.fieldname === "media" && isWebSafeImage(file));
           cb(null, goesToUploads ? UPLOADS_DIR : FILES_DIR);
         },
         filename: (req, file, cb) => {
-          const isImageField = file.fieldname === "image" || (file.fieldname === "media" && isImageMimetype(file.mimetype));
+          const isImageField = file.fieldname === "image" || (file.fieldname === "media" && isWebSafeImage(file));
           if (isImageField) {
             const ext = ALLOWED_EXT.includes(path.extname(file.originalname).toLowerCase())
               ? path.extname(file.originalname).toLowerCase()
@@ -451,7 +456,11 @@ const productUpload = multer({
       }),
   limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    if (isImageMimetype(file.mimetype)) return cb(null, true);
+    if (isImageMimetype(file.mimetype)) {
+      if (isWebSafeImage(file)) return cb(null, true);
+      // psd, tiff, heic 등 브라우저가 못 여는 이미지 형식 — jpg/png로 내보내서 올려달라고 안내합니다.
+      return cb(new Error("이미지는 jpg, png, webp, gif 형식만 올릴 수 있습니다. (psd, tiff, heic 등은 jpg나 png로 저장해서 다시 올려주세요)"));
+    }
     if (file.fieldname === "image") return cb(new Error("이미지 파일만 업로드할 수 있습니다."));
     const ext = path.extname(file.originalname).toLowerCase();
     if (ALLOWED_FILE_EXT.includes(ext)) return cb(null, true);
