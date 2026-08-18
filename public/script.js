@@ -110,7 +110,7 @@ function renderProducts() {
       <div class="product-thumb" style="background:${thumbColor(p.cat)}">
         ${p.badge ? `<span class="product-badge">${p.badge}</span>` : ""}
         <button class="product-wish ${isWished ? "active" : ""}" data-wish="${p.id}" aria-label="위시리스트">${ICON_HEART(isWished)}</button>
-        ${p.img ? `<img class="product-thumb-img" src="${p.img}" alt="${p.displayName || p.name}">` : `<span>${p.icon}</span>`}
+        ${p.img ? `<div class="product-thumb-img" role="img" aria-label="${p.displayName || p.name}" style="background-image:url('${p.img}')"></div>` : `<span>${p.icon}</span>`}
       </div>
       <div class="product-info">
         <span class="product-cat">${p.catLabel}</span>
@@ -198,7 +198,7 @@ function renderCart() {
       total += unitPrice * item.qty;
       return `
         <div class="cart-item">
-          <div class="cart-item-thumb" style="background:${thumbColor(p.cat)}">${p.img ? `<img class="cart-item-thumb-img" src="${p.img}" alt="${p.displayName || p.name}">` : p.icon}</div>
+          <div class="cart-item-thumb" style="background:${thumbColor(p.cat)}">${p.img ? `<div class="cart-item-thumb-img" role="img" aria-label="${p.displayName || p.name}" style="background-image:url('${p.img}')"></div>` : p.icon}</div>
           <div class="cart-item-info">
             <p class="cart-item-name">${p.displayName || p.name}${option ? ` <span class="cart-item-option">(${option.name})</span>` : ""}</p>
             <p class="cart-item-price">${formatWon(unitPrice)}</p>
@@ -283,7 +283,7 @@ function openProductModal(id) {
   productModal.innerHTML = `
     <button class="modal-close" id="modalClose">${ICON_CLOSE}</button>
     <div class="modal-top">
-      <div class="modal-thumb" style="background:${thumbColor(p.cat)}">${p.img ? `<img class="modal-thumb-img" src="${p.img}" alt="${p.displayName || p.name}">` : p.icon}</div>
+      <div class="modal-thumb" style="background:${thumbColor(p.cat)}">${p.img ? `<div class="modal-thumb-img" role="img" aria-label="${p.displayName || p.name}" style="background-image:url('${p.img}')"></div>` : p.icon}</div>
       <div class="modal-info">
         <span class="product-cat">${p.catLabel}</span>
         <h2>${p.displayName || p.name}</h2>
