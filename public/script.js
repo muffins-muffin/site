@@ -84,9 +84,6 @@ function getFilteredProducts() {
     case "price-desc":
       list.sort((a, b) => b.price - a.price);
       break;
-    case "rating":
-      list.sort((a, b) => b.rating - a.rating);
-      break;
     default:
       list.sort((a, b) => b.reviews - a.reviews);
   }
@@ -118,7 +115,6 @@ function renderProducts() {
       <div class="product-info">
         <span class="product-cat">${p.catLabel}</span>
         <h3 class="product-name">${p.displayName || p.name}</h3>
-        <span class="product-rating">⭐ ${p.rating} (${p.reviews})</span>
         <div class="product-price-row">
           <span class="product-price">${formatWon(p.price)}</span>
           ${p.originalPrice ? `<span class="product-price-original">${formatWon(p.originalPrice)}</span><span class="product-discount">${discount}%</span>` : ""}
@@ -281,7 +277,6 @@ function openProductModal(id) {
     <div class="modal-info">
       <span class="product-cat">${p.catLabel}</span>
       <h2>${p.displayName || p.name}</h2>
-      <p class="modal-rating">⭐ ${p.rating} · 리뷰 ${p.reviews}개</p>
       <div class="modal-price-row">
         <span class="modal-price">${formatWon(p.price)}</span>
         ${p.originalPrice ? `<span class="product-price-original">${formatWon(p.originalPrice)}</span><span class="product-discount">${discount}%</span>` : ""}

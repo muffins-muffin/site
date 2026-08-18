@@ -102,7 +102,6 @@ function renderTable() {
           <td>${CATEGORY_LABELS[p.cat] || p.cat}</td>
           <td>${formatWon(p.price)}${p.originalPrice ? `<br><span class="product-name-sub" style="text-decoration:line-through">${formatWon(p.originalPrice)}</span>` : ""}</td>
           <td>${p.badge ? `<span class="badge-chip">${p.badge}</span>` : "-"}</td>
-          <td>⭐ ${p.rating ?? "-"} (${p.reviews ?? 0})</td>
           <td>${statusBadge}</td>
           <td>
             <div class="row-actions">${actions}</div>
@@ -240,10 +239,7 @@ function startEdit(product) {
   form.cat.value = product.cat || "remotecam";
   form.desc.value = product.desc || "";
   form.price.value = product.price ?? "";
-  form.originalPrice.value = product.originalPrice ?? "";
   form.badge.value = product.badge || "none";
-  form.rating.value = product.rating ?? "";
-  form.reviews.value = product.reviews ?? "";
   form.icon.value = product.icon || "";
   form.image.value = "";
 

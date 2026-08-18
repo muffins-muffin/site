@@ -581,7 +581,13 @@ app.put("/admin/api/products/:id", requireAdminApi, productUploadFields, async (
   }
 
   try {
-    const originalPrice = body.originalPrice ? Number(body.originalPrice) : null;
+    // 정가(originalPrice)는 관리자 폼에서 뺐습니다 — 요청에 필드가 아예 없으면(대부분의 경우)
+    // 기존 값을 그대로 둡니다. 혹시 명시적으로 보내면(예: API 직접 호출) 그 값을 반영합니다.
+    let originalPrice = existing.originalPrice;
+    if (body.originalPrice !== undefined) {
+      const parsed = body.originalPrice ? Number(body.originalPrice) : null;
+      originalPrice = Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+    }
 
     let img = existing.img || null;
     let finalIcon = existing.icon || null;
@@ -599,7 +605,7 @@ app.put("/admin/api/products/:id", requireAdminApi, productUploadFields, async (
       cat,
       catLabel: CATEGORY_LABELS[cat],
       price,
-      originalPrice: Number.isFinite(originalPrice) && originalPrice > 0 ? originalPrice : null,
+      originalPrice,
       rating: body.rating ? Number(body.rating) : existing.rating,
       reviews: body.reviews !== undefined && body.reviews !== "" ? Number(body.reviews) : existing.reviews,
       badge: body.badge && body.badge !== "none" ? body.badge : null,
