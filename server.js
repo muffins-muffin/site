@@ -507,9 +507,9 @@ app.post("/admin/api/products", requireAdminApi, productUploadFields, async (req
   const icon = (body.icon || "").trim();
   const imageFile = req.files && req.files.image && req.files.image[0];
 
-  if (!name || !CATEGORY_LABELS[cat] || !desc || !Number.isFinite(price) || price <= 0 || (!imageFile && !icon)) {
+  if (!name || !CATEGORY_LABELS[cat] || !Number.isFinite(price) || price <= 0 || (!imageFile && !icon)) {
     cleanupUploadedFiles(req);
-    return res.status(400).json({ message: "이름·카테고리·설명·가격을 확인하고, 이미지를 업로드하거나 아이콘을 입력해주세요." });
+    return res.status(400).json({ message: "이름·카테고리·가격을 확인하고, 이미지를 업로드하거나 아이콘을 입력해주세요." });
   }
 
   let options;
@@ -565,9 +565,9 @@ app.put("/admin/api/products/:id", requireAdminApi, productUploadFields, async (
   const icon = (body.icon || "").trim();
   const imageFile = req.files && req.files.image && req.files.image[0];
 
-  if (!name || !CATEGORY_LABELS[cat] || !desc || !Number.isFinite(price) || price <= 0) {
+  if (!name || !CATEGORY_LABELS[cat] || !Number.isFinite(price) || price <= 0) {
     cleanupUploadedFiles(req);
-    return res.status(400).json({ message: "이름·카테고리·설명·가격을 확인해주세요." });
+    return res.status(400).json({ message: "이름·카테고리·가격을 확인해주세요." });
   }
 
   let options = existing.options;

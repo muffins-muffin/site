@@ -286,7 +286,7 @@ function openProductModal(id) {
         <span class="modal-price">${formatWon(p.price)}</span>
         ${p.originalPrice ? `<span class="product-price-original">${formatWon(p.originalPrice)}</span><span class="product-discount">${discount}%</span>` : ""}
       </div>
-      <p class="modal-desc">${p.desc}</p>
+      ${p.desc ? `<p class="modal-desc">${p.desc}</p>` : ""}
       ${optionSelectHtml}
       <div class="modal-actions">
         <button class="btn btn-primary" data-modal-add="${p.id}">장바구니 담기</button>
