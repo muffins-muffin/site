@@ -741,8 +741,8 @@ img { max-width: 100%; display: block; }
 .modal-thumb-img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  object-position: top center;
+  object-fit: contain;
+  object-position: center;
 }
 .modal-info { padding: 32px; display: flex; flex-direction: column; }
 .modal-info .product-cat { margin-bottom: 8px; }
