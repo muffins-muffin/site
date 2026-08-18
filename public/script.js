@@ -282,24 +282,25 @@ function openProductModal(id) {
 
   productModal.innerHTML = `
     <button class="modal-close" id="modalClose">${ICON_CLOSE}</button>
-    <div class="modal-thumb" style="background:${thumbColor(p.cat)}">${p.img ? `<img class="modal-thumb-img" src="${p.img}" alt="${p.displayName || p.name}">` : p.icon}</div>
-    <div class="modal-info">
-      <span class="product-cat">${p.catLabel}</span>
-      <h2>${p.displayName || p.name}</h2>
-      <div class="modal-price-row">
-        <span class="modal-price">${formatWon(p.price)}</span>
-        ${p.originalPrice ? `<span class="product-price-original">${formatWon(p.originalPrice)}</span><span class="product-discount">${discount}%</span>` : ""}
+    <div class="modal-top">
+      <div class="modal-thumb" style="background:${thumbColor(p.cat)}">${p.img ? `<img class="modal-thumb-img" src="${p.img}" alt="${p.displayName || p.name}">` : p.icon}</div>
+      <div class="modal-info">
+        <span class="product-cat">${p.catLabel}</span>
+        <h2>${p.displayName || p.name}</h2>
+        <div class="modal-price-row">
+          <span class="modal-price">${formatWon(p.price)}</span>
+          ${p.originalPrice ? `<span class="product-price-original">${formatWon(p.originalPrice)}</span><span class="product-discount">${discount}%</span>` : ""}
+        </div>
+        ${p.desc ? `<p class="modal-desc">${p.desc}</p>` : ""}
+        ${optionSelectHtml}
+        <div class="modal-actions">
+          <button class="btn btn-primary" data-modal-add="${p.id}">장바구니 담기</button>
+          <button class="btn btn-ghost" data-wish="${p.id}">${ICON_HEART(state.wishlist.has(p.id))}<span>${state.wishlist.has(p.id) ? "위시완료" : "위시추가"}</span></button>
+        </div>
+        ${filesHtml}
       </div>
-      ${p.desc ? `<p class="modal-desc">${p.desc}</p>` : ""}
-      ${optionSelectHtml}
-      <div class="modal-actions">
-        <button class="btn btn-primary" data-modal-add="${p.id}">장바구니 담기</button>
-        <button class="btn btn-ghost" data-wish="${p.id}">${ICON_HEART(state.wishlist.has(p.id))}<span>${state.wishlist.has(p.id) ? "위시완료" : "위시추가"}</span></button>
-      </div>
-      ${filesHtml}
-      ${detailImagesHtml}
-      ${policyHtml}
     </div>
+    ${detailImagesHtml || policyHtml ? `<div class="modal-detail-section">${detailImagesHtml}${policyHtml}</div>` : ""}
   `;
   modalOverlay.classList.add("show");
 }
