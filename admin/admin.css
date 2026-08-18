@@ -256,6 +256,7 @@ body {
 }
 .badge-active { background: #ecfdf3; color: #15803d; }
 .badge-hidden { background: #fef2f2; color: var(--danger); }
+.badge-files { background: #eef2ff; color: var(--primary-dark); font-weight: 700; }
 .row-actions { display: flex; flex-wrap: wrap; gap: 6px; white-space: nowrap; }
 .empty-msg { text-align: center; color: var(--ink-soft); padding: 30px 0; }
 

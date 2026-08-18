@@ -509,7 +509,7 @@ app.post("/admin/api/products", requireAdminApi, productUploadFields, async (req
 
   if (!name || !CATEGORY_LABELS[cat] || !Number.isFinite(price) || price <= 0 || (!imageFile && !icon)) {
     cleanupUploadedFiles(req);
-    return res.status(400).json({ message: "이름·카테고리·가격을 확인하고, 이미지를 업로드하거나 아이콘을 입력해주세요." });
+    return res.status(400).json({ message: "이름·카테고리·가격을 확인하고, 상품 이미지를 업로드해주세요." });
   }
 
   let options;

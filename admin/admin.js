@@ -74,10 +74,12 @@ function renderTable() {
       const displayLine =
         displayName !== p.name ? `<div class="product-name-sub">노출: ${escapeHtml(displayName)}</div>` : "";
       const optionLine = p.options && p.options.length ? `<div class="product-name-sub">옵션 ${p.options.length}개</div>` : "";
-      const contentBits = [];
-      if (p.detailImages && p.detailImages.length) contentBits.push(`상세이미지 ${p.detailImages.length}장`);
-      if (p.files && p.files.length) contentBits.push(`첨부파일 ${p.files.length}개`);
-      const contentLine = contentBits.length ? `<div class="product-name-sub">${contentBits.join(" · ")}</div>` : "";
+      const contentLine =
+        p.detailImages && p.detailImages.length
+          ? `<div class="product-name-sub">상세이미지 ${p.detailImages.length}장</div>`
+          : "";
+      const filesBadge =
+        p.files && p.files.length ? `<span class="badge-chip badge-files">📎 ${p.files.length}</span>` : "-";
       const statusBadge = p.hidden
         ? `<span class="badge-chip badge-hidden">판매중지</span>`
         : `<span class="badge-chip badge-active">판매중</span>`;
@@ -102,6 +104,7 @@ function renderTable() {
           <td>${CATEGORY_LABELS[p.cat] || p.cat}</td>
           <td>${formatWon(p.price)}${p.originalPrice ? `<br><span class="product-name-sub" style="text-decoration:line-through">${formatWon(p.originalPrice)}</span>` : ""}</td>
           <td>${p.badge ? `<span class="badge-chip">${p.badge}</span>` : "-"}</td>
+          <td>${filesBadge}</td>
           <td>${statusBadge}</td>
           <td>
             <div class="row-actions">${actions}</div>
@@ -240,7 +243,6 @@ function startEdit(product) {
   form.desc.value = product.desc || "";
   form.price.value = product.price ?? "";
   form.badge.value = product.badge || "none";
-  form.icon.value = product.icon || "";
   form.image.value = "";
 
   if (product.img) {
