@@ -14,10 +14,7 @@ const optionRows = document.getElementById("optionRows");
 const addOptionBtn = document.getElementById("addOptionBtn");
 
 const detailImageGrid = document.getElementById("detailImageGrid");
-const detailImageInput = document.getElementById("detailImageInput");
-
 const fileList = document.getElementById("fileList");
-const fileInput = document.getElementById("fileInput");
 
 const settingsForm = document.getElementById("settingsForm");
 const settingsSubmitBtn = document.getElementById("settingsSubmitBtn");

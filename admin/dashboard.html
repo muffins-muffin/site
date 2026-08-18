@@ -56,17 +56,19 @@
           </div>
 
           <div class="detail-images-section">
-            <label>상세설명 이미지 <span class="hint-inline">(순서대로 상품 상세페이지에 쭉 나열됩니다)</span></label>
+            <label>사진 <span class="hint-inline">(상품 상세페이지에 순서대로 쭉 나열됩니다)</span></label>
             <div id="detailImageGrid" class="detail-image-grid"></div>
-            <input type="file" id="detailImageInput" name="detailImages" accept="image/*" multiple>
-            <p class="hint">여기서 고른 이미지는 아래 [상품 등록/수정 저장] 버튼을 누를 때 함께 올라갑니다.</p>
           </div>
 
           <div class="detail-images-section">
-            <label>첨부파일 <span class="hint-inline">(설명서·스펙시트 등, 고객이 다운로드할 수 있습니다)</span></label>
+            <label>첨부파일 <span class="hint-inline">(설명서·스펙시트 등 문서, 고객이 다운로드할 수 있습니다)</span></label>
             <ul id="fileList" class="file-list"></ul>
-            <input type="file" id="fileInput" name="files" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.hwp,.zip,.txt,.csv,image/*" multiple>
-            <p class="hint">여기서 고른 파일도 아래 [상품 등록/수정 저장] 버튼을 누를 때 함께 올라갑니다.</p>
+          </div>
+
+          <div class="detail-images-section">
+            <label for="mediaInput">사진 · 첨부파일 추가</label>
+            <input type="file" id="mediaInput" name="media" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.hwp,.zip,.txt,.csv" multiple>
+            <p class="hint">사진과 문서를 한 번에 골라서 올리면 됩니다 — 사진은 자동으로 위 "사진" 칸에, 문서는 "첨부파일" 칸에 들어갑니다. 아래 [상품 등록/수정 저장] 버튼을 눌러야 실제로 올라갑니다.</p>
           </div>
         </div>
 

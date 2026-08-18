@@ -421,40 +421,46 @@ async function saveUploadedFile(file) {
   return `files/${file.filename}`;
 }
 
-// 상품 등록/수정 폼 하나에서 대표 이미지(image) + 상세설명 이미지(detailImages) + 첨부파일(files)을
-// 한 번에 받습니다. 필드별로 저장 위치/허용 형식이 다르므로 file.fieldname으로 분기합니다.
+// 상품 등록/수정 폼 하나에서 대표 이미지(image) + 상세페이지 미디어(media)를 한 번에 받습니다.
+// media는 사진과 첨부파일(pdf 등)을 한 입력창에서 같이 받고, 이미지인지 아닌지는
+// mimetype으로 서버가 자동으로 구분합니다 — 관리자가 "이 사진을 어느 칸에 넣어야 하지"
+// 고민할 필요 없이, 이미지는 상세 이미지로, 문서는 첨부파일로 알아서 분류됩니다.
+function isImageMimetype(mimetype) {
+  return /^image\//.test(mimetype);
+}
 const productUpload = multer({
   storage: R2_ENABLED
     ? multer.memoryStorage()
     : multer.diskStorage({
-        destination: (req, file, cb) => cb(null, file.fieldname === "files" ? FILES_DIR : UPLOADS_DIR),
+        destination: (req, file, cb) => {
+          const goesToUploads = file.fieldname === "image" || (file.fieldname === "media" && isImageMimetype(file.mimetype));
+          cb(null, goesToUploads ? UPLOADS_DIR : FILES_DIR);
+        },
         filename: (req, file, cb) => {
-          if (file.fieldname === "files") {
-            const ext = path.extname(file.originalname).toLowerCase();
-            cb(null, `file_${Date.now()}_${crypto.randomBytes(4).toString("hex")}${ALLOWED_FILE_EXT.includes(ext) ? ext : ""}`);
-          } else {
+          const isImageField = file.fieldname === "image" || (file.fieldname === "media" && isImageMimetype(file.mimetype));
+          if (isImageField) {
             const ext = ALLOWED_EXT.includes(path.extname(file.originalname).toLowerCase())
               ? path.extname(file.originalname).toLowerCase()
               : ".png";
             cb(null, `product_${Date.now()}_${crypto.randomBytes(4).toString("hex")}${ext}`);
+          } else {
+            const ext = path.extname(file.originalname).toLowerCase();
+            cb(null, `file_${Date.now()}_${crypto.randomBytes(4).toString("hex")}${ALLOWED_FILE_EXT.includes(ext) ? ext : ""}`);
           }
         },
       }),
   limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    if (file.fieldname === "files") {
-      const ext = path.extname(file.originalname).toLowerCase();
-      if (ALLOWED_FILE_EXT.includes(ext)) return cb(null, true);
-      return cb(new Error("첨부파일 형식을 확인해주세요. (pdf, doc, xls, ppt, hwp, zip, txt, csv, 이미지)"));
-    }
-    if (/^image\//.test(file.mimetype)) return cb(null, true);
-    cb(new Error("이미지 파일만 업로드할 수 있습니다."));
+    if (isImageMimetype(file.mimetype)) return cb(null, true);
+    if (file.fieldname === "image") return cb(new Error("이미지 파일만 업로드할 수 있습니다."));
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ALLOWED_FILE_EXT.includes(ext)) return cb(null, true);
+    cb(new Error("지원하지 않는 형식입니다. (이미지, pdf, doc, xls, ppt, hwp, zip, txt, csv)"));
   },
 });
 const productUploadFields = productUpload.fields([
   { name: "image", maxCount: 1 },
-  { name: "detailImages", maxCount: 10 },
-  { name: "files", maxCount: 10 },
+  { name: "media", maxCount: 20 },
 ]);
 
 // 상품 옵션(옵션명 + 추가금액) JSON 문자열을 검증합니다. 폼에서 [{ "name": "블랙", "priceDelta": 0 }, ...] 형태로 보냅니다.
@@ -477,11 +483,12 @@ app.get("/admin/api/products", requireAdminApi, (req, res) => {
   res.json(getAllProducts(true)); // 판매중지 상품도 함께 보여줍니다.
 });
 
-// 상세설명 이미지·첨부파일로 새로 올라온 파일들을 저장하고, 상품에 이어붙입니다.
+// media 필드로 올라온 파일들을 이미지/문서로 자동 분류해 저장하고, 상품에 이어붙입니다.
 // (등록 시점에도, 수정 시점에도 같은 방식으로 "추가"됩니다 — 기존 항목은 그대로 유지)
 async function appendUploadedExtras(product, files) {
-  const detailImageFiles = (files && files.detailImages) || [];
-  const fileAttachments = (files && files.files) || [];
+  const media = (files && files.media) || [];
+  const detailImageFiles = media.filter((f) => isImageMimetype(f.mimetype));
+  const fileAttachments = media.filter((f) => !isImageMimetype(f.mimetype));
 
   let result = product;
   if (detailImageFiles.length) {
@@ -491,7 +498,9 @@ async function appendUploadedExtras(product, files) {
   }
   if (fileAttachments.length) {
     const newFiles = [];
-    for (const f of fileAttachments) newFiles.push({ name: fixMulterFilename(f.originalname), ref: await saveUploadedFile(f) });
+    for (const f of fileAttachments) {
+      newFiles.push({ name: fixMulterFilename(f.originalname), ref: await saveUploadedFile(f), type: f.mimetype });
+    }
     result = updateProductFiles(result.id, [...(result.files || []), ...newFiles]);
   }
   return result;

@@ -242,20 +242,29 @@ function openProductModal(id) {
       </div>`
     : "";
 
-  const detailImagesHtml =
-    p.detailImages && p.detailImages.length
-      ? `<div class="modal-detail-images">${p.detailImages.map((ref) => `<img src="${ref}" alt="상세 이미지" loading="lazy">`).join("")}</div>`
-      : "";
+  // 첨부파일(files) 중 실제로는 이미지인 항목은 문서 목록이 아니라 사진으로 보여줍니다.
+  // (신규 업로드는 서버가 자동 분류하지만, 예전에 잘못 올라간 항목을 위한 안전망입니다)
+  // files/ 저장 위치는 정적으로 공개되지 않으므로, 다운로드 라우트를 통해 불러옵니다
+  // (이미지를 <img>로 불러올 때는 Content-Disposition:attachment와 무관하게 브라우저가 그대로 렌더링합니다).
+  const isImageFile = (f) =>
+    f.type ? f.type.startsWith("image/") : /\.(png|jpe?g|gif|webp)$/i.test(f.name || f.ref || "");
+  const fileEntries = (p.files || []).map((f, i) => ({ ...f, index: i }));
+  const imagesFromFiles = fileEntries.filter(isImageFile).map((f) => `${window.API_BASE || ""}/product-files/${p.id}/${f.index}`);
+  const docFiles = fileEntries.filter((f) => !isImageFile(f));
 
-  const filesHtml =
-    p.files && p.files.length
-      ? `<ul class="modal-files">${p.files
-          .map(
-            (f, i) =>
-              `<li><a href="${window.API_BASE || ""}/product-files/${p.id}/${i}" target="_blank" rel="noopener">📎 ${f.name}</a></li>`
-          )
-          .join("")}</ul>`
-      : "";
+  const allPhotos = [...(p.detailImages || []), ...imagesFromFiles];
+  const detailImagesHtml = allPhotos.length
+    ? `<div class="modal-detail-images">${allPhotos.map((src) => `<img src="${src}" alt="상세 이미지" loading="lazy">`).join("")}</div>`
+    : "";
+
+  const filesHtml = docFiles.length
+    ? `<ul class="modal-files">${docFiles
+        .map(
+          (f) =>
+            `<li><a href="${window.API_BASE || ""}/product-files/${p.id}/${f.index}" target="_blank" rel="noopener">📎 ${f.name}</a></li>`
+        )
+        .join("")}</ul>`
+    : "";
 
   const policyHtml = SETTINGS
     ? `
